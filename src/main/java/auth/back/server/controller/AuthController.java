@@ -13,12 +13,15 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import web.common.core.response.base.dto.ResponseDataDTO;
+
+import java.util.concurrent.TimeUnit;
 
 /**
  * Auth Controller - 인증/인가 전용 컨트롤러
@@ -42,6 +45,12 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
+
+    @Value("${app.jwt.access-token-expiration-ms:3600000}")
+    private long accessTokenExpirationMs;
+
+    @Value("${app.jwt.refresh-token-expiration-ms:1209600000}")
+    private long refreshTokenExpirationMs;
 
     /**
      * 로그인
@@ -79,7 +88,7 @@ public class AuthController {
         refreshTokenCookie.setHttpOnly(true);
         refreshTokenCookie.setSecure(false); // HTTPS에서는 true로 설정
         refreshTokenCookie.setPath("/");
-        refreshTokenCookie.setMaxAge(7 * 24 * 60 * 60); // 7일
+        refreshTokenCookie.setMaxAge((int) TimeUnit.MILLISECONDS.toSeconds(refreshTokenExpirationMs));
         response.addCookie(refreshTokenCookie);
 
         log.info("User {} logged in successfully", user.getUsername());
@@ -88,7 +97,7 @@ public class AuthController {
         LoginResponse loginResponse = LoginResponse.builder()
                 .accessToken(accessToken)
                 .tokenType("Bearer")
-                .expiresIn(900)
+                .expiresIn(TimeUnit.MILLISECONDS.toSeconds(accessTokenExpirationMs))
                 .build();
 
         return ResponseDataDTO.of(loginResponse, "Login successful");
@@ -126,7 +135,7 @@ public class AuthController {
         LoginResponse loginResponse = LoginResponse.builder()
                 .accessToken(newAccessToken)
                 .tokenType("Bearer")
-                .expiresIn(900)
+                .expiresIn(TimeUnit.MILLISECONDS.toSeconds(accessTokenExpirationMs))
                 .build();
 
         return ResponseDataDTO.of(loginResponse, "Token refreshed");
