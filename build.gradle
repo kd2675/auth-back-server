@@ -51,6 +51,9 @@ dependencies {
     
     // auth-common-core 라이브러리
     implementation project(':auth-common-core')
+
+    // web-common-core 라이브러리 (공통 Response/Code)
+    implementation project(':web-common-core')
     
     // Test
     testImplementation 'org.springframework.boot:spring-boot-starter-test'

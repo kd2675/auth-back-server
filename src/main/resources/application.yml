@@ -1,6 +1,6 @@
 spring:
   application:
-    name: zeroq-service-back
+    name: auth-back-server
   profiles:
     active: local
     group:
@@ -24,7 +24,7 @@ spring:
 
 app:
   jwt:
-    secret: your-super-secret-key-change-this-in-production-12345
+    secret: your-super-secret-key-change-this-in-production-12345-this-in-production-12345
     access-token-expiration-ms: 900000
     refresh-token-expiration-ms: 604800000
 
