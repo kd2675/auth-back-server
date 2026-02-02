@@ -1,5 +1,6 @@
 package auth.back.server.database.pub.entity;
 
+import auth.common.core.constant.Provider;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -28,7 +29,7 @@ public class User implements UserDetails {
     @Column(unique = true, nullable = false)
     private String username;
 
-    @Column(nullable = false)
+    @Column
     private String password;
 
     @Column(unique = true)
@@ -37,8 +38,19 @@ public class User implements UserDetails {
     @Column(name = "user_role")
     private String role;
 
+    @Column(name = "image_url")
+    private String imageUrl;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Provider provider;
+
+    @Column(name = "provider_id")
+    private String providerId;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;

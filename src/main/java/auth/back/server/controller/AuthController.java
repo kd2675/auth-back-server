@@ -152,22 +152,13 @@ public class AuthController {
             @RequestHeader(value = "Authorization", required = false) String token,
             HttpServletResponse response) {
 
-        Long userId = null;
-
-        // Gateway가 보내준 X-User-Id 헤더 사용 (우선)
         if (userIdHeader != null && !userIdHeader.isEmpty()) {
-            userId = Long.parseLong(userIdHeader);
-        }
-        // fallback: Authorization 헤더에서 추출
-        else if (token != null && token.startsWith("Bearer ")) {
-            String jwt = token.substring(7);
-            userId = jwtTokenProvider.getUserIdFromToken(jwt);
-        }
-
-        if (userId != null) {
+            Long userId = Long.parseLong(userIdHeader);
             refreshTokenService.deleteByUserId(userId);
             log.info("User {} logged out successfully", userId);
         }
+
+        log.error("test : id: {}, token: {}", userIdHeader, token);
 
         // Refresh Token 쿠키 삭제
         Cookie refreshTokenCookie = new Cookie("refreshToken", null);
