@@ -5,7 +5,6 @@ import auth.back.server.database.pub.entity.User;
 import auth.back.server.service.JwtTokenProvider;
 import auth.back.server.service.RefreshTokenService;
 import auth.back.server.service.oauth2.UserPrincipal;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +13,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
+import web.common.core.utils.CookieUtils;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -51,12 +51,8 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         String accessToken = jwtTokenProvider.generateAccessToken(user);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
 
-        Cookie refreshTokenCookie = new Cookie("refreshToken", refreshToken.getToken());
-        refreshTokenCookie.setHttpOnly(true);
-        refreshTokenCookie.setSecure(false); // HTTPS에서는 true로 설정
-        refreshTokenCookie.setPath("/");
-        refreshTokenCookie.setMaxAge((int) TimeUnit.MILLISECONDS.toSeconds(refreshTokenExpirationMs));
-        response.addCookie(refreshTokenCookie);
+        int maxAgeSeconds = (int) TimeUnit.MILLISECONDS.toSeconds(refreshTokenExpirationMs);
+        CookieUtils.createCookie("refreshToken", refreshToken.getToken(), maxAgeSeconds);
         
         return UriComponentsBuilder.fromUriString(redirectUri)
                 .queryParam("token", accessToken)

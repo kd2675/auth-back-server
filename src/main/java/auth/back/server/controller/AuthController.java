@@ -9,7 +9,6 @@ import auth.common.core.dto.LoginResponse;
 import auth.common.core.dto.TokenValidationResponse;
 import auth.common.core.exception.AuthException;
 import auth.common.core.exception.InvalidTokenException;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +19,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import web.common.core.response.base.dto.ResponseDataDTO;
+import web.common.core.utils.CookieUtils;
 
 import java.util.concurrent.TimeUnit;
 
@@ -58,9 +58,7 @@ public class AuthController {
      * - Refresh Token은 HttpOnly 쿠키에 설정
      */
     @PostMapping("/login")
-    public ResponseDataDTO<LoginResponse> login(
-            @RequestBody LoginRequest request,
-            HttpServletResponse response) {
+    public ResponseDataDTO<LoginResponse> login(@RequestBody LoginRequest request) {
 
         log.info("Login attempt for username: {}", request.getUsername());
 
@@ -83,13 +81,9 @@ public class AuthController {
         );
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
 
-        // Refresh Token을 HttpOnly 쿠키에 설정 (7일)
-        Cookie refreshTokenCookie = new Cookie("refreshToken", refreshToken.getToken());
-        refreshTokenCookie.setHttpOnly(true);
-        refreshTokenCookie.setSecure(false); // HTTPS에서는 true로 설정
-        refreshTokenCookie.setPath("/");
-        refreshTokenCookie.setMaxAge((int) TimeUnit.MILLISECONDS.toSeconds(refreshTokenExpirationMs));
-        response.addCookie(refreshTokenCookie);
+        // Refresh Token을 HttpOnly 쿠키에 설정
+        int maxAgeSeconds = (int) TimeUnit.MILLISECONDS.toSeconds(refreshTokenExpirationMs);
+        CookieUtils.createCookie("refreshToken", refreshToken.getToken(), maxAgeSeconds);
 
         log.info("User {} logged in successfully", user.getUsername());
 
@@ -149,8 +143,7 @@ public class AuthController {
     @PostMapping("/logout")
     public ResponseDataDTO<Void> logout(
             @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
-            @RequestHeader(value = "Authorization", required = false) String token,
-            HttpServletResponse response) {
+            @RequestHeader(value = "Authorization", required = false) String token) {
 
         if (userIdHeader != null && !userIdHeader.isEmpty()) {
             Long userId = Long.parseLong(userIdHeader);
@@ -158,15 +151,10 @@ public class AuthController {
             log.info("User {} logged out successfully", userId);
         }
 
-        log.error("test : id: {}, token: {}", userIdHeader, token);
+        log.debug("Logout - id: {}, token: {}", userIdHeader, token);
 
         // Refresh Token 쿠키 삭제
-        Cookie refreshTokenCookie = new Cookie("refreshToken", null);
-        refreshTokenCookie.setHttpOnly(true);
-        refreshTokenCookie.setSecure(false);
-        refreshTokenCookie.setPath("/");
-        refreshTokenCookie.setMaxAge(0); // 즉시 만료
-        response.addCookie(refreshTokenCookie);
+        CookieUtils.deleteCookie("refreshToken");
 
         return ResponseDataDTO.of(null, "Logged out successfully");
     }
