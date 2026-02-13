@@ -24,8 +24,8 @@ database:
     pub:
       master:
         url: jdbc:mysql://mysql-10490:3306/AUTH?zeroDateTimeBehavior=convertToNull&useLegacyDatetimeCode=false&serverTimezone=Asia/Seoul&noAccessToProcedureBodies=true&useSSL=false&allowPublicKeyRetrieval=true&autoReconnect=true&maxReconnects=3
-        username: root
-        password: 1234
+        username: ${AUTH_DB_USERNAME}
+        password: ${AUTH_DB_PASSWORD}
         driver-class-name: com.mysql.cj.jdbc.Driver
         maximum-pool-size: 4
         minimum-idle: 2
@@ -33,8 +33,8 @@ database:
         maxLifetime: 1800000
       slave1:
         url: jdbc:mysql://mysql-10490:3306/AUTH?zeroDateTimeBehavior=convertToNull&useLegacyDatetimeCode=false&serverTimezone=Asia/Seoul&noAccessToProcedureBodies=true&useSSL=false&allowPublicKeyRetrieval=true&autoReconnect=true&maxReconnects=3
-        username: root
-        password: 1234
+        username: ${AUTH_DB_USERNAME}
+        password: ${AUTH_DB_PASSWORD}
         driver-class-name: com.mysql.cj.jdbc.Driver
         maximum-pool-size: 4
         minimum-idle: 1

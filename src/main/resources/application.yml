@@ -1,4 +1,8 @@
 spring:
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:auth-back-server/.env[.properties]
   application:
     name: auth-back-server
   profiles:
@@ -31,8 +35,8 @@ spring:
       client:
         registration:
           naver:
-            client-id: J9dLulAH1L1KezqnQMsV
-            client-secret: c2m85EdsnM
+            client-id: ${NAVER_CLIENT_ID}
+            client-secret: ${NAVER_CLIENT_SECRET}
             client-name: Naver
             authorization-grant-type: authorization_code
 #            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
@@ -48,7 +52,7 @@ spring:
             user-name-attribute: response
 app:
   jwt:
-    secret: your-super-secret-key-change-this-in-production-12345-this-in-production-12345
+    secret: ${AUTH_JWT_SECRET}
 #    access-token-expiration-ms: 3600000
 #    refresh-token-expiration-ms: 1209600000
     access-token-expiration-ms: 60000
