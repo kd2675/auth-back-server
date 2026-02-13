@@ -107,32 +107,37 @@ public class AuthController {
 
         log.info("Token refresh request");
 
-        if (refreshTokenFromCookie == null || refreshTokenFromCookie.isEmpty()) {
-            throw new AuthException("Refresh token not found in cookie");
+        try {
+            if (refreshTokenFromCookie == null || refreshTokenFromCookie.isEmpty()) {
+                throw new AuthException("Refresh token not found in cookie");
+            }
+
+            RefreshToken refreshToken = refreshTokenService.findByToken(refreshTokenFromCookie)
+                    .orElseThrow(() -> new AuthException("Refresh token not found"));
+
+            // 만료 확인 (만료 시 AuthException)
+            refreshTokenService.verifyExpiration(refreshToken);
+
+            User user = refreshToken.getUser();
+            String newAccessToken = jwtTokenProvider.generateAccessToken(
+                    user.getUsername(),
+                    user.getId(),
+                    user.getRole()
+            );
+
+            log.info("Token refreshed for user: {}", user.getUsername());
+
+            LoginResponse loginResponse = LoginResponse.builder()
+                    .accessToken(newAccessToken)
+                    .tokenType("Bearer")
+                    .expiresIn(TimeUnit.MILLISECONDS.toSeconds(accessTokenExpirationMs))
+                    .build();
+
+            return ResponseDataDTO.of(loginResponse, "Token refreshed");
+        } catch (AuthException ex) {
+            CookieUtils.deleteCookie("refreshToken");
+            throw ex;
         }
-
-        RefreshToken refreshToken = refreshTokenService.findByToken(refreshTokenFromCookie)
-                .orElseThrow(() -> new AuthException("Refresh token not found"));
-
-        // 만료 확인 (만료 시 TokenExpiredException -> GlobalExceptionHandler)
-        refreshTokenService.verifyExpiration(refreshToken);
-
-        User user = refreshToken.getUser();
-        String newAccessToken = jwtTokenProvider.generateAccessToken(
-                user.getUsername(),
-                user.getId(),
-                user.getRole()
-        );
-
-        log.info("Token refreshed for user: {}", user.getUsername());
-
-        LoginResponse loginResponse = LoginResponse.builder()
-                .accessToken(newAccessToken)
-                .tokenType("Bearer")
-                .expiresIn(TimeUnit.MILLISECONDS.toSeconds(accessTokenExpirationMs))
-                .build();
-
-        return ResponseDataDTO.of(loginResponse, "Token refreshed");
     }
 
     /**

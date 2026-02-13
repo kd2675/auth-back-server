@@ -47,6 +47,12 @@ public class AuthorizationServerConfig {
     @Value("${app.oauth2.client.web.post-logout-redirect-uri}")
     private String webPostLogoutRedirectUri;
 
+    @Value("${app.jwt.access-token-expiration-ms:3600000}")
+    private long accessTokenExpirationMs;
+
+    @Value("${app.jwt.refresh-token-expiration-ms:1209600000}")
+    private long refreshTokenExpirationMs;
+
     @Bean
     public AuthorizationServerSettings authorizationServerSettings() {
         return AuthorizationServerSettings.builder()
@@ -93,8 +99,8 @@ public class AuthorizationServerConfig {
             }
 
             TokenSettings tokenSettings = TokenSettings.builder()
-                    .accessTokenTimeToLive(Duration.ofMinutes(15))
-                    .refreshTokenTimeToLive(Duration.ofDays(7))
+                    .accessTokenTimeToLive(Duration.ofMillis(accessTokenExpirationMs))
+                    .refreshTokenTimeToLive(Duration.ofMillis(refreshTokenExpirationMs))
                     .build();
 
             ClientSettings clientSettings = ClientSettings.builder()

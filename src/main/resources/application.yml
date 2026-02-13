@@ -16,6 +16,10 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        jdbc:
+          time_zone: Asia/Seoul
+  jackson:
+    time-zone: Asia/Seoul
   cloud:
     discovery:
       client:
@@ -45,8 +49,10 @@ spring:
 app:
   jwt:
     secret: your-super-secret-key-change-this-in-production-12345-this-in-production-12345
-    access-token-expiration-ms: 3600000
-    refresh-token-expiration-ms: 1209600000
+#    access-token-expiration-ms: 3600000
+#    refresh-token-expiration-ms: 1209600000
+    access-token-expiration-ms: 60000
+    refresh-token-expiration-ms: 90000
   security:
     issuer: http://localhost:9000
   oauth2:

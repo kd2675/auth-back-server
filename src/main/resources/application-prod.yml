@@ -23,7 +23,7 @@ database:
   datasource:
     pub:
       master:
-        url: jdbc:mysql://mysql-10490:3306/ZEROQ?zeroDateTimeBehavior=convertToNull&useLegacyDatetimeCode=false&serverTimezone=Asia/Seoul&noAccessToProcedureBodies=true&useSSL=false&allowPublicKeyRetrieval=true&autoReconnect=true&maxReconnects=3
+        url: jdbc:mysql://mysql-10490:3306/AUTH?zeroDateTimeBehavior=convertToNull&useLegacyDatetimeCode=false&serverTimezone=Asia/Seoul&noAccessToProcedureBodies=true&useSSL=false&allowPublicKeyRetrieval=true&autoReconnect=true&maxReconnects=3
         username: root
         password: 1234
         driver-class-name: com.mysql.cj.jdbc.Driver
@@ -32,7 +32,7 @@ database:
         connection-timeout: 30000
         maxLifetime: 1800000
       slave1:
-        url: jdbc:mysql://mysql-10490:3306/ZEROQ?zeroDateTimeBehavior=convertToNull&useLegacyDatetimeCode=false&serverTimezone=Asia/Seoul&noAccessToProcedureBodies=true&useSSL=false&allowPublicKeyRetrieval=true&autoReconnect=true&maxReconnects=3
+        url: jdbc:mysql://mysql-10490:3306/AUTH?zeroDateTimeBehavior=convertToNull&useLegacyDatetimeCode=false&serverTimezone=Asia/Seoul&noAccessToProcedureBodies=true&useSSL=false&allowPublicKeyRetrieval=true&autoReconnect=true&maxReconnects=3
         username: root
         password: 1234
         driver-class-name: com.mysql.cj.jdbc.Driver

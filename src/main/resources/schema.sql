@@ -1,4 +1,4 @@
-use ZEROQ;
+use AUTH;
 
 CREATE TABLE oauth2_registered_client (
     id varchar(100) NOT NULL,

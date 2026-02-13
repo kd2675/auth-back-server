@@ -71,6 +71,7 @@ public class GlobalExceptionHandler {
                 .body(ResponseErrorDTO.of(Code.UNAUTHORIZED, e.getMessage()));
     }
 
+
     /**
      * 일반 예외
      */
