@@ -1,5 +1,6 @@
 package auth.back.server.database.pub.entity;
 
+import auth.common.core.constant.UserRole;
 import auth.common.core.constant.Provider;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -59,19 +60,18 @@ public class User implements UserDetails {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
-        if (role == null) {
-            role = "USER";
-        }
+        role = UserRole.normalize(role);
     }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+        role = UserRole.normalize(role);
     }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_" + role));
+        return List.of(new SimpleGrantedAuthority("ROLE_" + UserRole.normalize(role)));
     }
 
     @Override

@@ -2,6 +2,7 @@ package auth.back.server.service;
 
 import auth.back.server.database.pub.entity.User;
 import auth.back.server.database.pub.repository.UserRepository;
+import auth.common.core.constant.UserRole;
 import auth.common.core.exception.AuthException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,7 +47,7 @@ public class UserService implements UserDetailsService {
                 .username(username)
                 .password(passwordEncoder.encode(password))
                 .email(email)
-                .role("USER")
+                .role(UserRole.USER)
                 .build();
 
         return userRepository.save(user);

@@ -5,6 +5,7 @@ import auth.back.server.database.pub.repository.UserRepository;
 import auth.back.server.dto.oauth2.OAuth2UserInfo;
 import auth.back.server.dto.oauth2.OAuth2UserInfoFactory;
 import auth.common.core.constant.Provider;
+import auth.common.core.constant.UserRole;
 import auth.common.core.exception.OAuth2AuthenticationProcessingException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.InternalAuthenticationServiceException;
@@ -72,7 +73,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 .imageUrl(oAuth2UserInfo.getImageUrl())
                 .provider(provider)
                 .providerId(oAuth2UserInfo.getId())
-                .role("USER")
+                .role(UserRole.USER)
                 .build();
         return userRepository.save(user);
     }

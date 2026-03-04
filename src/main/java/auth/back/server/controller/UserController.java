@@ -3,6 +3,7 @@ package auth.back.server.controller;
 import auth.back.server.database.pub.entity.User;
 import auth.back.server.database.pub.repository.UserRepository;
 import auth.back.server.service.UserService;
+import auth.common.core.constant.UserRole;
 import auth.common.core.dto.UserCreateRequest;
 import auth.common.core.dto.UserDto;
 import auth.common.core.dto.UserUpdateRequest;
@@ -139,7 +140,7 @@ public class UserController {
         log.info("Get all users, role: {}", userRole);
 
         // ADMIN 권한 체크
-        if (!"ADMIN".equalsIgnoreCase(userRole) && !"ROLE_ADMIN".equalsIgnoreCase(userRole)) {
+        if (!isAdmin(userRole)) {
             throw new AuthException("Admin access required");
         }
 
@@ -194,7 +195,10 @@ public class UserController {
             if (!isAdmin(userRole)) {
                 throw new AuthException("Only admin can change user role");
             }
-            user.setRole(request.getRole());
+            if (!UserRole.isValidRole(request.getRole())) {
+                throw new AuthException("Invalid role. Allowed: USER, MANAGER, ADMIN");
+            }
+            user.setRole(UserRole.normalize(request.getRole()));
         }
 
         if (request.getPassword() != null) {
@@ -279,6 +283,6 @@ public class UserController {
      * 현재 사용자가 ADMIN인지 확인
      */
     private boolean isAdmin(String userRole) {
-        return "ADMIN".equalsIgnoreCase(userRole) || "ROLE_ADMIN".equalsIgnoreCase(userRole);
+        return UserRole.isAdmin(userRole);
     }
 }
