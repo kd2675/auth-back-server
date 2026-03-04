@@ -63,10 +63,10 @@ app:
     client:
       web:
         client-id: zeroq-web
-        redirect-uri: http://localhost:3000/login/oauth2/code/zeroq
-        post-logout-redirect-uri: http://localhost:3000
+        redirect-uri: http://localhost:3001/login/oauth2/code/zeroq
+        post-logout-redirect-uri: http://localhost:3001
       service:
-        redirect-uri: http://localhost:3000/login
+        redirect-uri: http://localhost:3001/login
 
 eureka:
   client:
