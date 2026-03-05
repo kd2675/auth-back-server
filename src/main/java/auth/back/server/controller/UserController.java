@@ -159,11 +159,18 @@ public class UserController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ResponseDataDTO<UserDto> createUser(@RequestBody UserCreateRequest request) {
-        log.info("Create user: username={}, email={}", request.getUsername(), request.getEmail());
+        log.info(
+                "Create user: username={}, email={}, role={}",
+                request.getUsername(),
+                request.getEmail(),
+                request.getRole()
+        );
         User user = userService.registerUser(
                 request.getUsername(),
                 request.getPassword(),
-                request.getEmail()
+                request.getEmail(),
+                request.getRole(),
+                request.getSignupSecret()
         );
         return ResponseDataDTO.of(convertToDto(user), "User created successfully");
     }

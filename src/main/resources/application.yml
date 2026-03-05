@@ -67,6 +67,8 @@ app:
         post-logout-redirect-uri: http://localhost:3001
       service:
         redirect-uri: http://localhost:3001/login
+  signup:
+    manager-secret: ${AUTH_MANAGER_SIGNUP_SECRET:1234}
 
 eureka:
   client:
