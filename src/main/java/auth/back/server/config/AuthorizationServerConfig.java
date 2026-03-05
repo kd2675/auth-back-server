@@ -24,6 +24,7 @@ import org.springframework.security.oauth2.server.authorization.settings.TokenSe
 
 import javax.sql.DataSource;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
 import com.nimbusds.jose.jwk.JWKSet;
@@ -38,14 +39,41 @@ public class AuthorizationServerConfig {
     @Value("${app.security.issuer}")
     private String issuer;
 
-    @Value("${app.oauth2.client.web.client-id}")
-    private String webClientId;
+    @Value("${app.oauth2.front-clients.muse.client-id}")
+    private String museClientId;
 
-    @Value("${app.oauth2.client.web.redirect-uri}")
-    private String webRedirectUri;
+    @Value("${app.oauth2.front-clients.muse.redirect-uri}")
+    private String museRedirectUri;
 
-    @Value("${app.oauth2.client.web.post-logout-redirect-uri}")
-    private String webPostLogoutRedirectUri;
+    @Value("${app.oauth2.front-clients.muse.post-logout-redirect-uri}")
+    private String musePostLogoutRedirectUri;
+
+    @Value("${app.oauth2.front-clients.zeroq-service.client-id}")
+    private String zeroqServiceClientId;
+
+    @Value("${app.oauth2.front-clients.zeroq-service.redirect-uri}")
+    private String zeroqServiceRedirectUri;
+
+    @Value("${app.oauth2.front-clients.zeroq-service.post-logout-redirect-uri}")
+    private String zeroqServicePostLogoutRedirectUri;
+
+    @Value("${app.oauth2.front-clients.zeroq-admin.client-id}")
+    private String zeroqAdminClientId;
+
+    @Value("${app.oauth2.front-clients.zeroq-admin.redirect-uri}")
+    private String zeroqAdminRedirectUri;
+
+    @Value("${app.oauth2.front-clients.zeroq-admin.post-logout-redirect-uri}")
+    private String zeroqAdminPostLogoutRedirectUri;
+
+    @Value("${app.oauth2.front-clients.semo.client-id}")
+    private String semoClientId;
+
+    @Value("${app.oauth2.front-clients.semo.redirect-uri}")
+    private String semoRedirectUri;
+
+    @Value("${app.oauth2.front-clients.semo.post-logout-redirect-uri}")
+    private String semoPostLogoutRedirectUri;
 
     @Value("${app.jwt.access-token-expiration-ms:3600000}")
     private long accessTokenExpirationMs;
@@ -91,13 +119,8 @@ public class AuthorizationServerConfig {
     }
 
     @Bean
-    public CommandLineRunner registerWebClient(RegisteredClientRepository registeredClientRepository) {
+    public CommandLineRunner registerFrontClients(RegisteredClientRepository registeredClientRepository) {
         return args -> {
-            RegisteredClient existing = registeredClientRepository.findByClientId(webClientId);
-            if (existing != null) {
-                return;
-            }
-
             TokenSettings tokenSettings = TokenSettings.builder()
                     .accessTokenTimeToLive(Duration.ofMillis(accessTokenExpirationMs))
                     .refreshTokenTimeToLive(Duration.ofMillis(refreshTokenExpirationMs))
@@ -108,22 +131,70 @@ public class AuthorizationServerConfig {
                     .requireAuthorizationConsent(false)
                     .build();
 
-            RegisteredClient webClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                    .clientId(webClientId)
-                    .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
-                    .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                    .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                    .redirectUri(webRedirectUri)
-                    .postLogoutRedirectUri(webPostLogoutRedirectUri)
-                    .scope(OidcScopes.OPENID)
-                    .scope(OidcScopes.PROFILE)
-                    .scope("api")
-                    .tokenSettings(tokenSettings)
-                    .clientSettings(clientSettings)
-                    .build();
-
-            registeredClientRepository.save(webClient);
+            for (FrontClientSpec spec : buildFrontClientSpecs()) {
+                upsertFrontClient(registeredClientRepository, spec, tokenSettings, clientSettings);
+            }
         };
+    }
+
+    private void upsertFrontClient(
+            RegisteredClientRepository repository,
+            FrontClientSpec spec,
+            TokenSettings tokenSettings,
+            ClientSettings clientSettings
+    ) {
+        RegisteredClient existing = repository.findByClientId(spec.clientId());
+        RegisteredClient.Builder builder = existing == null
+                ? RegisteredClient.withId(UUID.randomUUID().toString())
+                : RegisteredClient.from(existing);
+
+        RegisteredClient client = builder
+                .clientId(spec.clientId())
+                .clientName(spec.clientId())
+                .clientAuthenticationMethods(methods -> {
+                    methods.clear();
+                    methods.add(ClientAuthenticationMethod.NONE);
+                })
+                .authorizationGrantTypes(grantTypes -> {
+                    grantTypes.clear();
+                    grantTypes.add(AuthorizationGrantType.AUTHORIZATION_CODE);
+                    grantTypes.add(AuthorizationGrantType.REFRESH_TOKEN);
+                })
+                .redirectUris(redirectUris -> {
+                    redirectUris.clear();
+                    redirectUris.add(spec.redirectUri());
+                })
+                .postLogoutRedirectUris(postLogoutRedirectUris -> {
+                    postLogoutRedirectUris.clear();
+                    postLogoutRedirectUris.add(spec.postLogoutRedirectUri());
+                })
+                .scopes(scopes -> {
+                    scopes.clear();
+                    scopes.add(OidcScopes.OPENID);
+                    scopes.add(OidcScopes.PROFILE);
+                    scopes.add("api");
+                })
+                .tokenSettings(tokenSettings)
+                .clientSettings(clientSettings)
+                .build();
+
+        repository.save(client);
+    }
+
+    private List<FrontClientSpec> buildFrontClientSpecs() {
+        return List.of(
+                new FrontClientSpec(museClientId, museRedirectUri, musePostLogoutRedirectUri),
+                new FrontClientSpec(zeroqServiceClientId, zeroqServiceRedirectUri, zeroqServicePostLogoutRedirectUri),
+                new FrontClientSpec(zeroqAdminClientId, zeroqAdminRedirectUri, zeroqAdminPostLogoutRedirectUri),
+                new FrontClientSpec(semoClientId, semoRedirectUri, semoPostLogoutRedirectUri)
+        );
+    }
+
+    private record FrontClientSpec(
+            String clientId,
+            String redirectUri,
+            String postLogoutRedirectUri
+    ) {
     }
 
     @Bean

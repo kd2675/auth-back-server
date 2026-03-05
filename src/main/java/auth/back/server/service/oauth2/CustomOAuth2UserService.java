@@ -47,7 +47,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
             throw new OAuth2AuthenticationProcessingException("Email not found from OAuth2 provider");
         }
 
-        Provider provider = Provider.valueOf(registrationId.toUpperCase());
+        Provider provider = resolveProvider(registrationId);
         Optional<User> userOptional = userRepository.findByProviderAndProviderId(provider, oAuth2UserInfo.getId());
         User user;
         if (userOptional.isPresent()) {
@@ -66,7 +66,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     }
 
     private User registerNewUser(OAuth2UserRequest oAuth2UserRequest, OAuth2UserInfo oAuth2UserInfo) {
-        Provider provider = Provider.valueOf(oAuth2UserRequest.getClientRegistration().getRegistrationId().toUpperCase());
+        Provider provider = resolveProvider(oAuth2UserRequest.getClientRegistration().getRegistrationId());
         User user = User.builder()
                 .username(oAuth2UserInfo.getName())
                 .email(oAuth2UserInfo.getEmail())
@@ -82,5 +82,18 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         existingUser.setUsername(oAuth2UserInfo.getName());
         existingUser.setImageUrl(oAuth2UserInfo.getImageUrl());
         return userRepository.save(existingUser);
+    }
+
+    private Provider resolveProvider(String registrationId) {
+        String normalized = registrationId == null ? "" : registrationId.trim().toLowerCase();
+
+        if (normalized.startsWith(Provider.NAVER.name().toLowerCase())) {
+            return Provider.NAVER;
+        }
+        if (normalized.startsWith(Provider.KAKAO.name().toLowerCase())) {
+            return Provider.KAKAO;
+        }
+
+        throw new OAuth2AuthenticationProcessingException("Unsupported OAuth2 provider: " + registrationId);
     }
 }

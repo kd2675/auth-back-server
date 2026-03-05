@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -25,9 +26,21 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
 
-    @Value("${app.oauth2.client.service.redirect-uri}")
-    private String redirectUri;
-    
+    @Value("${app.oauth2.social.default-redirect-uri}")
+    private String defaultRedirectUri;
+
+    @Value("${app.oauth2.social.redirect-uris.muse}")
+    private String museRedirectUri;
+
+    @Value("${app.oauth2.social.redirect-uris.zeroq-service}")
+    private String zeroqServiceRedirectUri;
+
+    @Value("${app.oauth2.social.redirect-uris.zeroq-admin}")
+    private String zeroqAdminRedirectUri;
+
+    @Value("${app.oauth2.social.redirect-uris.semo}")
+    private String semoRedirectUri;
+
     @Value("${app.jwt.refresh-token-expiration-ms:1209600000}")
     private long refreshTokenExpirationMs;
 
@@ -47,15 +60,44 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     protected String determineTargetUrl(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
         User user = userPrincipal.getUser();
+        String registrationId = resolveRegistrationId(authentication);
 
         String accessToken = jwtTokenProvider.generateAccessToken(user);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
 
         int maxAgeSeconds = (int) TimeUnit.MILLISECONDS.toSeconds(refreshTokenExpirationMs);
         CookieUtils.createCookie("refreshToken", refreshToken.getToken(), maxAgeSeconds);
-        
-        return UriComponentsBuilder.fromUriString(redirectUri)
+
+        return UriComponentsBuilder.fromUriString(resolveFrontRedirectUri(registrationId))
                 .queryParam("token", accessToken)
                 .build().toUriString();
+    }
+
+    private String resolveRegistrationId(Authentication authentication) {
+        if (authentication instanceof OAuth2AuthenticationToken oauth2Token) {
+            return oauth2Token.getAuthorizedClientRegistrationId();
+        }
+        return "";
+    }
+
+    private String resolveFrontRedirectUri(String registrationId) {
+        if (registrationId == null) {
+            return defaultRedirectUri;
+        }
+
+        if (registrationId.endsWith("-muse")) {
+            return museRedirectUri;
+        }
+        if (registrationId.endsWith("-zeroq-service")) {
+            return zeroqServiceRedirectUri;
+        }
+        if (registrationId.endsWith("-zeroq-admin")) {
+            return zeroqAdminRedirectUri;
+        }
+        if (registrationId.endsWith("-semo")) {
+            return semoRedirectUri;
+        }
+
+        return defaultRedirectUri;
     }
 }
