@@ -1,9 +1,8 @@
 package auth.back.server.config;
 
-import static org.springframework.security.config.Customizer.withDefaults;
-
 import auth.back.server.config.handler.OAuth2AuthenticationFailureHandler;
 import auth.back.server.config.handler.OAuth2AuthenticationSuccessHandler;
+import auth.back.server.config.oauth2.HttpCookieOAuth2AuthorizationRequestRepository;
 import auth.back.server.service.oauth2.CustomOAuth2UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -22,8 +21,9 @@ import org.springframework.http.HttpMethod;
 public class SecurityConfiguration {
 
     private final CustomOAuth2UserService customOAuth2UserService;
-    private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
-    private final OAuth2AuthenticationFailureHandler oAuth2AuthenticationFailureHandler;
+    private final HttpCookieOAuth2AuthorizationRequestRepository authorizationRequestRepository;
+    private final OAuth2AuthenticationSuccessHandler oauth2AuthenticationSuccessHandler;
+    private final OAuth2AuthenticationFailureHandler oauth2AuthenticationFailureHandler;
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
@@ -35,19 +35,22 @@ public class SecurityConfiguration {
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                            .authorizeHttpRequests(authorize -> authorize
-                                .requestMatchers("/auth/login", "/auth/refresh", "/login/**").permitAll()
-                                .requestMatchers(HttpMethod.POST, "/api/users").permitAll()
-                                .anyRequest().authenticated()
-                            )                .oauth2Login(oauth2 -> oauth2
-                        .authorizationEndpoint(endpoint -> endpoint.baseUri("/oauth2/authorize"))
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/auth/login", "/auth/refresh", "/auth/bff/**", "/oauth2/**", "/login/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/users").permitAll()
+                        .anyRequest().authenticated()
+                )
+                .oauth2Login(oauth2 -> oauth2
+                        .authorizationEndpoint(endpoint -> endpoint
+                                .baseUri("/oauth2/authorization")
+                                .authorizationRequestRepository(authorizationRequestRepository)
+                        )
                         .redirectionEndpoint(endpoint -> endpoint.baseUri("/login/oauth2/code/*"))
-                        .successHandler(oAuth2AuthenticationSuccessHandler)
-                        .failureHandler(oAuth2AuthenticationFailureHandler)
+                        .successHandler(oauth2AuthenticationSuccessHandler)
+                        .failureHandler(oauth2AuthenticationFailureHandler)
                         .userInfoEndpoint(endpoint -> endpoint.userService(customOAuth2UserService))
                 );
 
         return http.build();
     }
 }
-

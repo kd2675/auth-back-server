@@ -10,6 +10,8 @@ public class OAuth2UserInfoFactory {
     public static OAuth2UserInfo getOAuth2UserInfo(String registrationId, Map<String, Object> attributes) {
         if (registrationId.equalsIgnoreCase(Provider.NAVER.name())) {
             return new NaverOAuth2UserInfo(attributes);
+        } else if (registrationId.equalsIgnoreCase(Provider.KAKAO.name())) {
+            return new KakaoOAuth2UserInfo(attributes);
         } else {
             throw new OAuth2AuthenticationProcessingException("Login with " + registrationId + " is not supported yet.");
         }

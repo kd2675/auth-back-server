@@ -9,15 +9,20 @@ import auth.common.core.constant.UserRole;
 import auth.common.core.exception.OAuth2AuthenticationProcessingException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.InternalAuthenticationServiceException;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -34,7 +39,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         } catch (AuthenticationException ex) {
             throw ex;
         } catch (Exception ex) {
-            // Throwing an instance of AuthenticationException will trigger the OAuth2AuthenticationFailureHandler
+            // Throwing AuthenticationException delegates to Spring Security OAuth2 failure handling.
             throw new InternalAuthenticationServiceException(ex.getMessage(), ex.getCause());
         }
     }
@@ -62,7 +67,19 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
             user = registerNewUser(oAuth2UserRequest, oAuth2UserInfo);
         }
 
-        return new UserPrincipal(user, oAuth2User.getAttributes());
+        Map<String, Object> attributes = new LinkedHashMap<>(oAuth2User.getAttributes());
+        // Keep userId as String to avoid polymorphic numeric type metadata persistence
+        // in OAuth2 authorization attributes.
+        attributes.put("userId", String.valueOf(user.getId()));
+        attributes.put("role", UserRole.normalize(user.getRole()));
+        attributes.put("username", user.getUsername());
+        attributes.put("email", user.getEmail());
+
+        return new DefaultOAuth2User(
+                Set.of(new SimpleGrantedAuthority("ROLE_" + UserRole.normalize(user.getRole()))),
+                attributes,
+                "userId"
+        );
     }
 
     private User registerNewUser(OAuth2UserRequest oAuth2UserRequest, OAuth2UserInfo oAuth2UserInfo) {

@@ -9,7 +9,6 @@ import auth.common.core.dto.LoginResponse;
 import auth.common.core.dto.TokenValidationResponse;
 import auth.common.core.exception.AuthException;
 import auth.common.core.exception.InvalidTokenException;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,6 +33,7 @@ import java.util.concurrent.TimeUnit;
  * - POST /auth/login        : 로그인 (토큰 발급)
  * - POST /auth/logout       : 로그아웃 (토큰 무효화)
  * - POST /auth/refresh      : Access Token 갱신
+ * - GET  /auth/session      : 쿠키 기반 세션 조회
  * - POST /auth/validate     : 토큰 검증 (내부 서비스용)
  */
 @RestController
@@ -82,7 +82,9 @@ public class AuthController {
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
 
         // Refresh Token을 HttpOnly 쿠키에 설정
+        int accessMaxAgeSeconds = (int) TimeUnit.MILLISECONDS.toSeconds(accessTokenExpirationMs);
         int maxAgeSeconds = (int) TimeUnit.MILLISECONDS.toSeconds(refreshTokenExpirationMs);
+        CookieUtils.createCookie("accessToken", accessToken, accessMaxAgeSeconds);
         CookieUtils.createCookie("refreshToken", refreshToken.getToken(), maxAgeSeconds);
 
         log.info("User {} logged in successfully", user.getUsername());
@@ -127,6 +129,9 @@ public class AuthController {
 
             log.info("Token refreshed for user: {}", user.getUsername());
 
+            int accessMaxAgeSeconds = (int) TimeUnit.MILLISECONDS.toSeconds(accessTokenExpirationMs);
+            CookieUtils.createCookie("accessToken", newAccessToken, accessMaxAgeSeconds);
+
             LoginResponse loginResponse = LoginResponse.builder()
                     .accessToken(newAccessToken)
                     .tokenType("Bearer")
@@ -135,6 +140,7 @@ public class AuthController {
 
             return ResponseDataDTO.of(loginResponse, "Token refreshed");
         } catch (AuthException ex) {
+            CookieUtils.deleteCookie("accessToken");
             CookieUtils.deleteCookie("refreshToken");
             throw ex;
         }
@@ -148,17 +154,30 @@ public class AuthController {
     @PostMapping("/logout")
     public ResponseDataDTO<Void> logout(
             @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
-            @RequestHeader(value = "Authorization", required = false) String token) {
+            @RequestHeader(value = "Authorization", required = false) String token,
+            @CookieValue(name = "accessToken", required = false) String accessTokenFromCookie) {
 
         if (userIdHeader != null && !userIdHeader.isEmpty()) {
             Long userId = Long.parseLong(userIdHeader);
             refreshTokenService.deleteByUserId(userId);
             log.info("User {} logged out successfully", userId);
+        } else if (accessTokenFromCookie != null && !accessTokenFromCookie.isBlank()) {
+            try {
+                jwtTokenProvider.validateToken(accessTokenFromCookie);
+                Long userId = jwtTokenProvider.getUserIdFromToken(accessTokenFromCookie);
+                if (userId != null) {
+                    refreshTokenService.deleteByUserId(userId);
+                    log.info("User {} logged out successfully (cookie)", userId);
+                }
+            } catch (Exception ignored) {
+                log.debug("Access token cookie not usable during logout");
+            }
         }
 
         log.debug("Logout - id: {}, token: {}", userIdHeader, token);
 
         // Refresh Token 쿠키 삭제
+        CookieUtils.deleteCookie("accessToken");
         CookieUtils.deleteCookie("refreshToken");
 
         return ResponseDataDTO.of(null, "Logged out successfully");
@@ -194,5 +213,27 @@ public class AuthController {
                 .build();
 
         return ResponseDataDTO.of(response, "Token is valid");
+    }
+
+    @GetMapping("/session")
+    public ResponseDataDTO<TokenValidationResponse> session(
+            @CookieValue(name = "accessToken", required = false) String accessTokenFromCookie) {
+        if (accessTokenFromCookie == null || accessTokenFromCookie.isBlank()) {
+            throw new InvalidTokenException("Access token not found in cookie");
+        }
+
+        jwtTokenProvider.validateToken(accessTokenFromCookie);
+        String username = jwtTokenProvider.getUsernameFromToken(accessTokenFromCookie);
+        Long userId = jwtTokenProvider.getUserIdFromToken(accessTokenFromCookie);
+        String role = jwtTokenProvider.getRoleFromToken(accessTokenFromCookie);
+
+        TokenValidationResponse response = TokenValidationResponse.builder()
+                .valid(true)
+                .username(username)
+                .userId(userId)
+                .role(role)
+                .build();
+
+        return ResponseDataDTO.of(response, "Session is valid");
     }
 }
