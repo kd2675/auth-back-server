@@ -1,6 +1,8 @@
 package auth.back.server.config;
 
+import auth.back.server.database.pub.entity.AuthRegisteredClient;
 import auth.back.server.database.pub.entity.User;
+import auth.back.server.database.pub.repository.AuthRegisteredClientRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
@@ -137,6 +139,18 @@ public class AuthorizationServerConfig {
         };
     }
 
+    @Bean
+    public CommandLineRunner registerLocalLoginClients(AuthRegisteredClientRepository authRegisteredClientRepository) {
+        return args -> {
+            int accessTtlSeconds = Math.toIntExact(Duration.ofMillis(accessTokenExpirationMs).getSeconds());
+            int refreshTtlSeconds = Math.toIntExact(Duration.ofMillis(refreshTokenExpirationMs).getSeconds());
+
+            for (LocalClientSpec spec : buildLocalClientSpecs()) {
+                upsertLocalClient(authRegisteredClientRepository, spec, accessTtlSeconds, refreshTtlSeconds);
+            }
+        };
+    }
+
     private void upsertFrontClient(
             RegisteredClientRepository repository,
             FrontClientSpec spec,
@@ -190,10 +204,47 @@ public class AuthorizationServerConfig {
         );
     }
 
+    private void upsertLocalClient(
+            AuthRegisteredClientRepository repository,
+            LocalClientSpec spec,
+            int accessTtlSeconds,
+            int refreshTtlSeconds
+    ) {
+        AuthRegisteredClient client = repository.findByClientId(spec.clientId())
+                .orElse(AuthRegisteredClient.builder()
+                        .id(spec.clientId())
+                        .build());
+
+        client.setClientId(spec.clientId());
+        client.setClientName(spec.clientName());
+        client.setScopes("api");
+        client.setAccessTokenTtlSeconds(accessTtlSeconds);
+        client.setRefreshTokenTtlSeconds(refreshTtlSeconds);
+        client.setRequireConsent(false);
+        client.setEnabled(true);
+
+        repository.save(client);
+    }
+
+    private List<LocalClientSpec> buildLocalClientSpecs() {
+        return List.of(
+                new LocalClientSpec(museClientId, "Muse Local Login"),
+                new LocalClientSpec(zeroqServiceClientId, "ZeroQ Service Local Login"),
+                new LocalClientSpec(zeroqAdminClientId, "ZeroQ Admin Local Login"),
+                new LocalClientSpec(semoClientId, "Semo Local Login")
+        );
+    }
+
     private record FrontClientSpec(
             String clientId,
             String redirectUri,
             String postLogoutRedirectUri
+    ) {
+    }
+
+    private record LocalClientSpec(
+            String clientId,
+            String clientName
     ) {
     }
 
@@ -203,7 +254,7 @@ public class AuthorizationServerConfig {
             if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
                 Object principal = context.getPrincipal().getPrincipal();
                 if (principal instanceof User user) {
-                    context.getClaims().claim("userId", user.getId());
+                    context.getClaims().claim("userKey", user.getUserKey());
                     context.getClaims().claim("role", user.getRole());
                 }
             }

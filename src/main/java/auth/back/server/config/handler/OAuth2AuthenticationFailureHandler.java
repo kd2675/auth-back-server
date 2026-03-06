@@ -30,15 +30,15 @@ public class OAuth2AuthenticationFailureHandler extends SimpleUrlAuthenticationF
 
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response, AuthenticationException exception) throws IOException {
-        String registrationId = resolveRegistrationId(request.getRequestURI());
-        String targetUrl = UriComponentsBuilder.fromUriString(resolveFrontRedirectUri(registrationId))
+        String clientId = resolveClientId(request.getRequestURI());
+        String targetUrl = UriComponentsBuilder.fromUriString(resolveFrontRedirectUri(clientId))
                 .queryParam("error", exception.getLocalizedMessage())
                 .build().toUriString();
 
         getRedirectStrategy().sendRedirect(request, response, targetUrl);
     }
 
-    private String resolveRegistrationId(String requestUri) {
+    private String resolveClientId(String requestUri) {
         if (requestUri == null) {
             return "";
         }
@@ -49,21 +49,21 @@ public class OAuth2AuthenticationFailureHandler extends SimpleUrlAuthenticationF
         return requestUri.substring(lastSlash + 1);
     }
 
-    private String resolveFrontRedirectUri(String registrationId) {
-        if (registrationId == null) {
+    private String resolveFrontRedirectUri(String clientId) {
+        if (clientId == null) {
             return defaultRedirectUri;
         }
 
-        if (registrationId.endsWith("-muse")) {
+        if (clientId.endsWith("-muse")) {
             return museRedirectUri;
         }
-        if (registrationId.endsWith("-zeroq-service")) {
+        if (clientId.endsWith("-zeroq-service")) {
             return zeroqServiceRedirectUri;
         }
-        if (registrationId.endsWith("-zeroq-admin")) {
+        if (clientId.endsWith("-zeroq-admin")) {
             return zeroqAdminRedirectUri;
         }
-        if (registrationId.endsWith("-semo")) {
+        if (clientId.endsWith("-semo")) {
             return semoRedirectUri;
         }
 

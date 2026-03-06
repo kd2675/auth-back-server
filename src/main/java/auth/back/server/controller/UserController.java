@@ -22,18 +22,18 @@ import java.util.stream.Collectors;
  *
  * Gateway Offloading 패턴:
  * - JWT 검증은 Gateway(cloud-back-server)에서 수행
- * - Gateway가 X-User-Id, X-User-Role 헤더를 추가해서 보냄
+ * - Gateway가 X-User-Key, X-User-Role 헤더를 추가해서 보냄
  * - 이 컨트롤러는 헤더 정보를 신뢰하고 비즈니스 로직만 수행
  *
  * 엔드포인트:
- * - GET    /api/users              : 모든 사용자 조회 (ADMIN만)
- * - GET    /api/users/{id}         : ID로 사용자 조회
+ * - GET    /api/users                : 모든 사용자 조회 (ADMIN만)
+ * - GET    /api/users/{userKey}       : user_key(opaque)로 사용자 조회
  * - GET    /api/users/username/{username} : Username으로 조회
  * - GET    /api/users/email/{email}       : Email로 조회
- * - GET    /api/users/{id}/exists  : 사용자 존재 여부 확인
- * - POST   /api/users              : 사용자 생성 (회원가입)
- * - PUT    /api/users/{id}         : 사용자 정보 수정
- * - DELETE /api/users/{id}         : 사용자 삭제
+ * - GET    /api/users/{userKey}/exists     : 사용자 존재 여부 확인
+ * - POST   /api/users                : 사용자 생성 (회원가입)
+ * - PUT    /api/users/{userKey}       : 사용자 정보 수정
+ * - DELETE /api/users/{userKey}       : 사용자 삭제
  */
 @RestController
 @RequestMapping("/api/users")
@@ -47,59 +47,54 @@ public class UserController {
     /**
      * 본인 정보 조회
      * GET /api/users/me
-     * - Gateway가 보내준 X-User-Id 헤더를 사용하여 본인 정보 조회
+     * - Gateway가 보내준 X-User-Key 헤더를 사용하여 본인 정보 조회
      */
     @GetMapping("/me")
     public ResponseDataDTO<UserDto> getMyInfo(
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
-        log.info("Get my info: userId={}", userIdHeader);
+            @RequestHeader(value = "X-User-Key", required = false) String userKeyHeader) {
+        log.info("Get my info: userKey={}", userKeyHeader);
 
-        if (userIdHeader == null || userIdHeader.isEmpty()) {
+        if (userKeyHeader == null || userKeyHeader.isEmpty()) {
             throw new AuthException("Authentication required");
         }
 
-        Long userId = Long.parseLong(userIdHeader);
-        User user = userService.findById(userId);
+        User user = userService.findByUserKey(userKeyHeader);
         return ResponseDataDTO.of(convertToDto(user));
     }
 
     /**
-     * ID로 User 조회 (본인 또는 ADMIN만 가능)
-     * GET /api/users/{id}
-     * - Gateway가 보내준 X-User-Id, X-User-Role 헤더로 권한 확인
+     * user_key로 User 조회 (본인 또는 ADMIN만 가능)
+     * GET /api/users/{userKey}
+     * - Gateway가 보내준 X-User-Key, X-User-Role 헤더로 권한 확인
      */
-    @GetMapping("/{id}")
-    public ResponseDataDTO<UserDto> getUserById(
-            @PathVariable Long id,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+    @GetMapping("/{userKey}")
+    public ResponseDataDTO<UserDto> getUserByUserKey(
+            @PathVariable String userKey,
+            @RequestHeader(value = "X-User-Key", required = false) String userKeyHeader,
             @RequestHeader(value = "X-User-Role", required = false) String userRole) {
-        log.info("Get user by id: id={}, requester={}", id, userIdHeader);
+        log.info("Get user by id: userKey={}, requester={}", userKey, userKeyHeader);
 
-        // 권한 체크: 본인이거나 ADMIN이어야 함
-        checkPermission(id, userIdHeader, userRole);
+        checkPermission(userKey, userKeyHeader, userRole);
 
-        User user = userService.findById(id);
+        User user = userService.findByUserKey(userKey);
         return ResponseDataDTO.of(convertToDto(user));
     }
 
     /**
      * Username으로 User 조회 (내부 서비스용 또는 본인/ADMIN)
      * GET /api/users/username/{username}
-     * - 주로 내부 서비스에서 사용 (OpenFeign)
-     * - 외부에서 접근 시 권한 체크
      */
     @GetMapping("/username/{username}")
     public ResponseDataDTO<UserDto> getUserByUsername(
             @PathVariable String username,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestHeader(value = "X-User-Key", required = false) String userKeyHeader,
             @RequestHeader(value = "X-User-Role", required = false) String userRole) {
-        log.info("Get user by username: username={}, requester={}", username, userIdHeader);
+        log.info("Get user by username: username={}, requester={}", username, userKeyHeader);
 
         User user = userService.findByUsername(username);
 
-        // 외부 요청인 경우 (헤더가 있는 경우) 권한 체크
-        if (userIdHeader != null && !userIdHeader.isEmpty()) {
-            checkPermission(user.getId(), userIdHeader, userRole);
+        if (userKeyHeader != null && !userKeyHeader.isEmpty()) {
+            checkPermission(user.getUserKey(), userKeyHeader, userRole);
         }
 
         return ResponseDataDTO.of(convertToDto(user));
@@ -108,22 +103,19 @@ public class UserController {
     /**
      * Email로 User 조회 (내부 서비스용 또는 본인/ADMIN)
      * GET /api/users/email/{email}
-     * - 주로 내부 서비스에서 사용 (OpenFeign)
-     * - 외부에서 접근 시 권한 체크
      */
     @GetMapping("/email/{email}")
     public ResponseDataDTO<UserDto> getUserByEmail(
             @PathVariable String email,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestHeader(value = "X-User-Key", required = false) String userKeyHeader,
             @RequestHeader(value = "X-User-Role", required = false) String userRole) {
-        log.info("Get user by email: email={}, requester={}", email, userIdHeader);
+        log.info("Get user by email: email={}, requester={}", email, userKeyHeader);
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new AuthException("User not found with email: " + email));
 
-        // 외부 요청인 경우 (헤더가 있는 경우) 권한 체크
-        if (userIdHeader != null && !userIdHeader.isEmpty()) {
-            checkPermission(user.getId(), userIdHeader, userRole);
+        if (userKeyHeader != null && !userKeyHeader.isEmpty()) {
+            checkPermission(user.getUserKey(), userKeyHeader, userRole);
         }
 
         return ResponseDataDTO.of(convertToDto(user));
@@ -132,14 +124,12 @@ public class UserController {
     /**
      * 모든 User 조회 (ADMIN만 가능)
      * GET /api/users
-     * - Gateway가 보내준 X-User-Role 헤더로 권한 확인
      */
     @GetMapping
     public ResponseDataDTO<List<UserDto>> getAllUsers(
             @RequestHeader(value = "X-User-Role", required = false) String userRole) {
         log.info("Get all users, role: {}", userRole);
 
-        // ADMIN 권한 체크
         if (!isAdmin(userRole)) {
             throw new AuthException("Admin access required");
         }
@@ -154,7 +144,6 @@ public class UserController {
     /**
      * User 생성 (회원가입)
      * POST /api/users
-     * - 인증 없이 접근 가능 (Gateway에서 permitAll)
      */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -177,27 +166,24 @@ public class UserController {
 
     /**
      * User 수정 (본인 또는 ADMIN만 가능)
-     * PUT /api/users/{id}
-     * - Gateway가 보내준 X-User-Id, X-User-Role 헤더로 권한 확인
+     * PUT /api/users/{userKey}
      */
-    @PutMapping("/{id}")
+    @PutMapping("/{userKey}")
     public ResponseDataDTO<UserDto> updateUser(
-            @PathVariable Long id,
+            @PathVariable String userKey,
             @RequestBody UserUpdateRequest request,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @RequestHeader(value = "X-User-Key", required = false) String userKeyHeader,
             @RequestHeader(value = "X-User-Role", required = false) String userRole) {
-        log.info("Update user: id={}, requester={}", id, userIdHeader);
+        log.info("Update user: userKey={}, requester={}", userKey, userKeyHeader);
 
-        // 권한 체크: 본인이거나 ADMIN이어야 함
-        checkPermission(id, userIdHeader, userRole);
+        checkPermission(userKey, userKeyHeader, userRole);
 
-        User user = userService.findById(id);
+        User user = userService.findByUserKey(userKey);
 
         if (request.getEmail() != null) {
             user.setEmail(request.getEmail());
         }
 
-        // Role 변경은 ADMIN만 가능
         if (request.getRole() != null) {
             if (!isAdmin(userRole)) {
                 throw new AuthException("Only admin can change user role");
@@ -218,19 +204,18 @@ public class UserController {
 
     /**
      * User 삭제 (본인 또는 ADMIN만 가능)
-     * DELETE /api/users/{id}
+     * DELETE /api/users/{userKey}
      */
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/{userKey}")
     public ResponseDataDTO<Void> deleteUser(
-            @PathVariable Long id,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader,
+            @PathVariable String userKey,
+            @RequestHeader(value = "X-User-Key", required = false) String userKeyHeader,
             @RequestHeader(value = "X-User-Role", required = false) String userRole) {
-        log.info("Delete user: id={}, requester={}", id, userIdHeader);
+        log.info("Delete user: userKey={}, requester={}", userKey, userKeyHeader);
 
-        // 권한 체크: 본인이거나 ADMIN이어야 함
-        checkPermission(id, userIdHeader, userRole);
+        checkPermission(userKey, userKeyHeader, userRole);
 
-        User user = userService.findById(id);
+        User user = userService.findByUserKey(userKey);
         userRepository.delete(user);
 
         return ResponseDataDTO.of(null, "User deleted successfully");
@@ -238,21 +223,18 @@ public class UserController {
 
     /**
      * User 존재 여부 확인
-     * GET /api/users/{id}/exists
+     * GET /api/users/{userKey}/exists
      */
-    @GetMapping("/{id}/exists")
-    public ResponseDataDTO<Boolean> existsById(@PathVariable Long id) {
-        log.info("Check user existence: id={}", id);
-        boolean exists = userRepository.existsById(id);
+    @GetMapping("/{userKey}/exists")
+    public ResponseDataDTO<Boolean> existsByUserKey(@PathVariable String userKey) {
+        log.info("Check user existence: userKey={}", userKey);
+        boolean exists = userRepository.existsByUserKey(userKey);
         return ResponseDataDTO.of(exists);
     }
 
-    /**
-     * User Entity -> UserDto 변환
-     */
     private UserDto convertToDto(User user) {
         return UserDto.builder()
-                .id(user.getId())
+                .userKey(user.getUserKey())
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .role(user.getRole())
@@ -263,32 +245,21 @@ public class UserController {
 
     /**
      * 권한 체크: 본인 또는 ADMIN만 허용
-     * - Gateway가 보내준 X-User-Id, X-User-Role 헤더 사용
      */
-    private void checkPermission(Long targetUserId, String userIdHeader, String userRole) {
-        // ADMIN이면 통과
+    private void checkPermission(String targetUserKey, String userKeyHeader, String userRole) {
         if (isAdmin(userRole)) {
             return;
         }
 
-        // 본인 확인
-        if (userIdHeader == null || userIdHeader.isEmpty()) {
+        if (userKeyHeader == null || userKeyHeader.isEmpty()) {
             throw new AuthException("Authentication required");
         }
 
-        try {
-            Long requesterId = Long.parseLong(userIdHeader);
-            if (!requesterId.equals(targetUserId)) {
-                throw new AuthException("You can only modify your own information");
-            }
-        } catch (NumberFormatException e) {
-            throw new AuthException("Invalid user ID");
+        if (!userKeyHeader.equals(targetUserKey)) {
+            throw new AuthException("You can only modify your own information");
         }
     }
 
-    /**
-     * 현재 사용자가 ADMIN인지 확인
-     */
     private boolean isAdmin(String userRole) {
         return UserRole.isAdmin(userRole);
     }

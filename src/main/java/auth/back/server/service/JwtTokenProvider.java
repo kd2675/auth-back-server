@@ -29,24 +29,45 @@ public class JwtTokenProvider {
      * Access Token 생성
      */
     public String generateAccessToken(User user) {
-        return generateAccessToken(user.getUsername(), user.getId(), user.getRole());
+        return generateAccessToken(user.getUsername(), user.getUserKey(), user.getRole());
     }
 
-    public String generateAccessToken(String username, Long userId, String role) {
-        return createToken(username, userId, role, accessTokenExpirationMs);
+    public String generateAccessToken(String username, String userKey, String role) {
+        return generateAccessToken(username, userKey, role, null, null);
+    }
+
+    public String generateAccessToken(User user, String loginType, String clientId) {
+        return generateAccessToken(user.getUsername(), user.getUserKey(), user.getRole(), loginType, clientId);
+    }
+
+    public String generateAccessToken(
+            String username,
+            String userKey,
+            String role,
+            String loginType,
+            String clientId
+    ) {
+        return createToken(username, userKey, role, loginType, clientId, accessTokenExpirationMs);
     }
 
     /**
      * Refresh Token 생성
      */
     public String generateRefreshToken(String username) {
-        return createToken(username, null, null, refreshTokenExpirationMs);
+        return createToken(username, null, null, null, null, refreshTokenExpirationMs);
     }
 
     /**
      * JWT 토큰 생성
      */
-    private String createToken(String username, Long userId, String role, long expirationMs) {
+    private String createToken(
+            String username,
+            String userKey,
+            String role,
+            String loginType,
+            String clientId,
+            long expirationMs
+    ) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expirationMs);
 
@@ -58,11 +79,17 @@ public class JwtTokenProvider {
                 .expiration(expiryDate)
                 .signWith(key, SignatureAlgorithm.HS512);
 
-        if (userId != null) {
-            builder.claim("userId", userId);
+        if (userKey != null) {
+            builder.claim("userKey", userKey);
         }
         if (role != null) {
             builder.claim("role", role);
+        }
+        if (loginType != null) {
+            builder.claim("loginType", loginType);
+        }
+        if (clientId != null) {
+            builder.claim("clientId", clientId);
         }
 
         return builder.compact();
@@ -87,18 +114,16 @@ public class JwtTokenProvider {
         }
     }
 
-    /**
-     * 토큰에서 userId 추출
-     */
-    public Long getUserIdFromToken(String token) {
+    public String getUserKeyFromToken(String token) {
         try {
             SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
-            return Jwts.parser()
+            Claims claims = Jwts.parser()
                     .verifyWith(key)
                     .build()
                     .parseSignedClaims(token)
-                    .getPayload()
-                    .get("userId", Long.class);
+                    .getPayload();
+            Object value = claims.get("userKey");
+            return value instanceof String ? (String) value : null;
         } catch (ExpiredJwtException e) {
             throw new TokenExpiredException("Token has expired");
         } catch (JwtException | IllegalArgumentException e) {

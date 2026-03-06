@@ -4,6 +4,7 @@ import auth.back.server.database.pub.entity.User;
 import auth.back.server.database.pub.repository.UserRepository;
 import auth.back.server.dto.oauth2.OAuth2UserInfo;
 import auth.back.server.dto.oauth2.OAuth2UserInfoFactory;
+import auth.back.server.service.UserKeyGenerator;
 import auth.common.core.constant.Provider;
 import auth.common.core.constant.UserRole;
 import auth.common.core.exception.OAuth2AuthenticationProcessingException;
@@ -24,6 +25,7 @@ import java.util.Optional;
 public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
     private final UserRepository userRepository;
+    private final UserKeyGenerator userKeyGenerator;
 
     @Override
     public OAuth2User loadUser(OAuth2UserRequest oAuth2UserRequest) throws OAuth2AuthenticationException {
@@ -40,14 +42,14 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     }
 
     private OAuth2User processOAuth2User(OAuth2UserRequest oAuth2UserRequest, OAuth2User oAuth2User) {
-        String registrationId = oAuth2UserRequest.getClientRegistration().getRegistrationId();
-        OAuth2UserInfo oAuth2UserInfo = OAuth2UserInfoFactory.getOAuth2UserInfo(registrationId, oAuth2User.getAttributes());
+        String clientId = oAuth2UserRequest.getClientRegistration().getRegistrationId();
+        OAuth2UserInfo oAuth2UserInfo = OAuth2UserInfoFactory.getOAuth2UserInfo(clientId, oAuth2User.getAttributes());
 
         if (!StringUtils.hasText(oAuth2UserInfo.getEmail())) {
             throw new OAuth2AuthenticationProcessingException("Email not found from OAuth2 provider");
         }
 
-        Provider provider = resolveProvider(registrationId);
+        Provider provider = resolveProvider(clientId);
         Optional<User> userOptional = userRepository.findByProviderAndProviderId(provider, oAuth2UserInfo.getId());
         User user;
         if (userOptional.isPresent()) {
@@ -66,8 +68,10 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     }
 
     private User registerNewUser(OAuth2UserRequest oAuth2UserRequest, OAuth2UserInfo oAuth2UserInfo) {
-        Provider provider = resolveProvider(oAuth2UserRequest.getClientRegistration().getRegistrationId());
+        String clientId = oAuth2UserRequest.getClientRegistration().getRegistrationId();
+        Provider provider = resolveProvider(clientId);
         User user = User.builder()
+                .userKey(userKeyGenerator.nextUserKey())
                 .username(oAuth2UserInfo.getName())
                 .email(oAuth2UserInfo.getEmail())
                 .imageUrl(oAuth2UserInfo.getImageUrl())
@@ -84,8 +88,8 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         return userRepository.save(existingUser);
     }
 
-    private Provider resolveProvider(String registrationId) {
-        String normalized = registrationId == null ? "" : registrationId.trim().toLowerCase();
+    private Provider resolveProvider(String clientId) {
+        String normalized = clientId == null ? "" : clientId.trim().toLowerCase();
 
         if (normalized.startsWith(Provider.NAVER.name().toLowerCase())) {
             return Provider.NAVER;
@@ -94,6 +98,6 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
             return Provider.KAKAO;
         }
 
-        throw new OAuth2AuthenticationProcessingException("Unsupported OAuth2 provider: " + registrationId);
+        throw new OAuth2AuthenticationProcessingException("Unsupported OAuth2 provider: " + clientId);
     }
 }

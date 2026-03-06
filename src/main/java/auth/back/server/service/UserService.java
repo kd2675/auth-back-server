@@ -30,6 +30,7 @@ public class UserService implements UserDetailsService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UserKeyGenerator userKeyGenerator;
 
     @Value("${app.signup.manager-secret:1234}")
     private String managerSignupSecret;
@@ -84,6 +85,7 @@ public class UserService implements UserDetailsService {
         }
 
         User user = User.builder()
+                .userKey(userKeyGenerator.nextUserKey())
                 .username(username)
                 .password(passwordEncoder.encode(password))
                 .email(email)
@@ -104,11 +106,11 @@ public class UserService implements UserDetailsService {
     }
 
     /**
-     * 사용자 조회 (ID)
+     * 사용자 조회 (opaque user_key)
      */
     @Transactional(readOnly = true)
-    public User findById(Long id) {
-        return userRepository.findById(id)
+    public User findByUserKey(String userKey) {
+        return userRepository.findByUserKey(userKey)
                 .orElseThrow(() -> new AuthException("User not found"));
     }
 

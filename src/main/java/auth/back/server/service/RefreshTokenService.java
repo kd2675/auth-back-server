@@ -70,7 +70,7 @@ public class RefreshTokenService {
     /**
      * 사용자 ID로 Refresh Token 삭제
      */
-    public void deleteByUserId(Long userId) {
-        refreshTokenRepository.deleteByUserId(userId);
+    public void deleteByUserKey(String userKey) {
+        refreshTokenRepository.deleteByUserKey(userKey);
     }
 }

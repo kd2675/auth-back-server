@@ -7,15 +7,15 @@ import java.util.Map;
 
 public class OAuth2UserInfoFactory {
 
-    public static OAuth2UserInfo getOAuth2UserInfo(String registrationId, Map<String, Object> attributes) {
-        String normalized = registrationId == null ? "" : registrationId.trim().toLowerCase();
+    public static OAuth2UserInfo getOAuth2UserInfo(String clientId, Map<String, Object> attributes) {
+        String normalized = clientId == null ? "" : clientId.trim().toLowerCase();
 
         if (normalized.startsWith(Provider.NAVER.name().toLowerCase())) {
             return new NaverOAuth2UserInfo(attributes);
         } else if (normalized.startsWith(Provider.KAKAO.name().toLowerCase())) {
             return new KakaoOAuth2UserInfo(attributes);
         } else {
-            throw new OAuth2AuthenticationProcessingException("Login with " + registrationId + " is not supported yet.");
+            throw new OAuth2AuthenticationProcessingException("Login with " + clientId + " is not supported yet.");
         }
     }
 }

@@ -4,6 +4,7 @@ import auth.back.server.database.pub.entity.RefreshToken;
 import auth.back.server.database.pub.entity.User;
 import auth.back.server.service.JwtTokenProvider;
 import auth.back.server.service.RefreshTokenService;
+import auth.back.server.service.oauth2.OAuth2ClientAuthorizationService;
 import auth.back.server.service.oauth2.UserPrincipal;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -17,6 +18,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import web.common.core.utils.CookieUtils;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 
 @Component
@@ -25,6 +27,7 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
 
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
+    private final OAuth2ClientAuthorizationService oAuth2ClientAuthorizationService;
 
     @Value("${app.oauth2.social.default-redirect-uri}")
     private String defaultRedirectUri;
@@ -44,6 +47,9 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     @Value("${app.jwt.refresh-token-expiration-ms:1209600000}")
     private long refreshTokenExpirationMs;
 
+    @Value("${app.jwt.access-token-expiration-ms:3600000}")
+    private long accessTokenExpirationMs;
+
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException {
         String targetUrl = determineTargetUrl(request, response, authentication);
@@ -60,41 +66,55 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     protected String determineTargetUrl(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
         User user = userPrincipal.getUser();
-        String registrationId = resolveRegistrationId(authentication);
+        String clientId = resolveClientId(authentication);
 
-        String accessToken = jwtTokenProvider.generateAccessToken(user);
+        String accessToken = jwtTokenProvider.generateAccessToken(user, "oauth2", clientId);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
+        Instant now = Instant.now();
+        Instant accessTokenExpiresAt = now.plusMillis(accessTokenExpirationMs);
+        Instant refreshTokenExpiresAt = now.plusMillis(refreshTokenExpirationMs);
+
+        oAuth2ClientAuthorizationService.validateAndSaveAuthorization(
+                clientId,
+                user,
+                accessToken,
+                now,
+                accessTokenExpiresAt,
+                refreshToken.getToken(),
+                now,
+                refreshTokenExpiresAt
+        );
 
         int maxAgeSeconds = (int) TimeUnit.MILLISECONDS.toSeconds(refreshTokenExpirationMs);
         CookieUtils.createCookie("refreshToken", refreshToken.getToken(), maxAgeSeconds);
 
-        return UriComponentsBuilder.fromUriString(resolveFrontRedirectUri(registrationId))
+        return UriComponentsBuilder.fromUriString(resolveFrontRedirectUri(clientId))
                 .queryParam("token", accessToken)
                 .build().toUriString();
     }
 
-    private String resolveRegistrationId(Authentication authentication) {
+    private String resolveClientId(Authentication authentication) {
         if (authentication instanceof OAuth2AuthenticationToken oauth2Token) {
             return oauth2Token.getAuthorizedClientRegistrationId();
         }
         return "";
     }
 
-    private String resolveFrontRedirectUri(String registrationId) {
-        if (registrationId == null) {
+    private String resolveFrontRedirectUri(String clientId) {
+        if (clientId == null) {
             return defaultRedirectUri;
         }
 
-        if (registrationId.endsWith("-muse")) {
+        if (clientId.endsWith("-muse")) {
             return museRedirectUri;
         }
-        if (registrationId.endsWith("-zeroq-service")) {
+        if (clientId.endsWith("-zeroq-service")) {
             return zeroqServiceRedirectUri;
         }
-        if (registrationId.endsWith("-zeroq-admin")) {
+        if (clientId.endsWith("-zeroq-admin")) {
             return zeroqAdminRedirectUri;
         }
-        if (registrationId.endsWith("-semo")) {
+        if (clientId.endsWith("-semo")) {
             return semoRedirectUri;
         }
 
