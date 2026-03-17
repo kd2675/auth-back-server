@@ -1,5 +1,6 @@
 package auth.back.server.config.handler;
 
+import auth.common.core.exception.OAuth2AuthenticationProcessingException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,11 +32,32 @@ public class OAuth2AuthenticationFailureHandler extends SimpleUrlAuthenticationF
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response, AuthenticationException exception) throws IOException {
         String clientId = resolveClientId(request.getRequestURI());
-        String targetUrl = UriComponentsBuilder.fromUriString(resolveFrontRedirectUri(clientId))
-                .queryParam("error", exception.getLocalizedMessage())
-                .build().toUriString();
+        OAuth2AuthenticationProcessingException oauth2Error = findOAuth2Error(exception);
+
+        UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(resolveFrontRedirectUri(clientId))
+                .queryParam("error", exception.getLocalizedMessage());
+
+        if (oauth2Error != null && oauth2Error.getErrorCode() != null) {
+            builder.queryParam("errorCode", oauth2Error.getErrorCode());
+        }
+        if (oauth2Error != null && oauth2Error.getProviderHint() != null) {
+            builder.queryParam("provider", oauth2Error.getProviderHint());
+        }
+
+        String targetUrl = builder.build().toUriString();
 
         getRedirectStrategy().sendRedirect(request, response, targetUrl);
+    }
+
+    private OAuth2AuthenticationProcessingException findOAuth2Error(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof OAuth2AuthenticationProcessingException oauth2Exception) {
+                return oauth2Exception;
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 
     private String resolveClientId(String requestUri) {

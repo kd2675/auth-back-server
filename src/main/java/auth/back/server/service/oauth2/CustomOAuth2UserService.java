@@ -37,7 +37,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
             throw ex;
         } catch (Exception ex) {
             // Throwing an instance of AuthenticationException will trigger the OAuth2AuthenticationFailureHandler
-            throw new InternalAuthenticationServiceException(ex.getMessage(), ex.getCause());
+            throw new InternalAuthenticationServiceException(ex.getMessage(), ex);
         }
     }
 
@@ -45,31 +45,44 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         String clientId = oAuth2UserRequest.getClientRegistration().getRegistrationId();
         OAuth2UserInfo oAuth2UserInfo = OAuth2UserInfoFactory.getOAuth2UserInfo(clientId, oAuth2User.getAttributes());
 
-        if (!StringUtils.hasText(oAuth2UserInfo.getEmail())) {
-            throw new OAuth2AuthenticationProcessingException("Email not found from OAuth2 provider");
-        }
-
-        Provider provider = resolveProvider(clientId);
-        Optional<User> userOptional = userRepository.findByProviderAndProviderId(provider, oAuth2UserInfo.getId());
-        User user;
-        if (userOptional.isPresent()) {
-            user = userOptional.get();
-            if (!user.getProvider().equals(provider)) {
-                throw new OAuth2AuthenticationProcessingException("Looks like you're signed up with " +
-                        user.getProvider() + " account. Please use your " + user.getProvider() +
-                        " account to login.");
-            }
-            user = updateExistingUser(user, oAuth2UserInfo);
-        } else {
-            user = registerNewUser(oAuth2UserRequest, oAuth2UserInfo);
-        }
+        User user = resolveOrRegisterUser(clientId, oAuth2UserInfo);
 
         return new UserPrincipal(user, oAuth2User.getAttributes());
     }
 
-    private User registerNewUser(OAuth2UserRequest oAuth2UserRequest, OAuth2UserInfo oAuth2UserInfo) {
-        String clientId = oAuth2UserRequest.getClientRegistration().getRegistrationId();
+    User resolveOrRegisterUser(String clientId, OAuth2UserInfo oAuth2UserInfo) {
+        if (!StringUtils.hasText(oAuth2UserInfo.getEmail())) {
+            throw new OAuth2AuthenticationProcessingException(
+                    "Email not found from OAuth2 provider",
+                    "oauth_email_missing",
+                    null
+            );
+        }
+
         Provider provider = resolveProvider(clientId);
+
+        Optional<User> exactMatch = userRepository.findByProviderAndProviderId(provider, oAuth2UserInfo.getId());
+        if (exactMatch.isPresent()) {
+            return updateExistingUser(exactMatch.get(), oAuth2UserInfo, provider);
+        }
+
+        Optional<User> emailMatch = userRepository.findByEmail(oAuth2UserInfo.getEmail());
+        if (emailMatch.isPresent()) {
+            User existingUser = emailMatch.get();
+            if (!existingUser.getProvider().equals(provider)) {
+                throw new OAuth2AuthenticationProcessingException("Looks like you're signed up with " +
+                        existingUser.getProvider() + " account. Please use your " + existingUser.getProvider() +
+                        " account to login.",
+                        "oauth_provider_mismatch",
+                        existingUser.getProvider().name());
+            }
+            return updateExistingUser(existingUser, oAuth2UserInfo, provider);
+        }
+
+        return registerNewUser(provider, oAuth2UserInfo);
+    }
+
+    private User registerNewUser(Provider provider, OAuth2UserInfo oAuth2UserInfo) {
         User user = User.builder()
                 .userKey(userKeyGenerator.nextUserKey())
                 .username(oAuth2UserInfo.getName())
@@ -82,9 +95,12 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         return userRepository.save(user);
     }
 
-    private User updateExistingUser(User existingUser, OAuth2UserInfo oAuth2UserInfo) {
+    private User updateExistingUser(User existingUser, OAuth2UserInfo oAuth2UserInfo, Provider provider) {
         existingUser.setUsername(oAuth2UserInfo.getName());
+        existingUser.setEmail(oAuth2UserInfo.getEmail());
         existingUser.setImageUrl(oAuth2UserInfo.getImageUrl());
+        existingUser.setProvider(provider);
+        existingUser.setProviderId(oAuth2UserInfo.getId());
         return userRepository.save(existingUser);
     }
 
@@ -98,6 +114,10 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
             return Provider.KAKAO;
         }
 
-        throw new OAuth2AuthenticationProcessingException("Unsupported OAuth2 provider: " + clientId);
+        throw new OAuth2AuthenticationProcessingException(
+                "Unsupported OAuth2 provider: " + clientId,
+                "oauth_provider_unsupported",
+                null
+        );
     }
 }
