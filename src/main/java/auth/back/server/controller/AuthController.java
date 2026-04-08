@@ -266,9 +266,6 @@ public class AuthController {
 
         log.info("Logout request");
 
-        log.error("token: {}", token);
-        log.error("refreshTokenFromCookie: {}", refreshTokenFromCookie);
-
         if (StringUtils.hasText(token) && token.startsWith("Bearer ")) {
             authAuthorizationService.invalidateByAccessToken(token.substring(7));
             oAuth2AuthorizationRevocationService.invalidateByAccessToken(token.substring(7));
