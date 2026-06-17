@@ -72,7 +72,7 @@ public class UserService implements UserDetailsService {
             throw new AuthException("Email already exists");
         }
 
-        String normalizedRole = UserRole.normalize(role);
+        String normalizedRole = normalizeSignupRole(role);
         if (!SIGNUP_ALLOWED_ROLES.contains(normalizedRole)) {
             throw new AuthException("Invalid role. Allowed: USER, MANAGER");
         }
@@ -94,6 +94,14 @@ public class UserService implements UserDetailsService {
                 .build();
 
         return userRepository.save(user);
+    }
+
+    private String normalizeSignupRole(String role) {
+        try {
+            return UserRole.normalizeAccountRoleOrDefault(role);
+        } catch (IllegalArgumentException ex) {
+            throw new AuthException("Invalid role. Allowed: USER, MANAGER");
+        }
     }
 
     /**

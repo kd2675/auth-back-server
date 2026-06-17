@@ -188,10 +188,10 @@ public class UserController {
             if (!isAdmin(userRole)) {
                 throw new AuthException("Only admin can change user role");
             }
-            if (!UserRole.isValidRole(request.getRole())) {
+            if (!UserRole.isValidAccountRole(request.getRole())) {
                 throw new AuthException("Invalid role. Allowed: USER, MANAGER, ADMIN");
             }
-            user.setRole(UserRole.normalize(request.getRole()));
+            user.setRole(UserRole.normalizeAccountRoleOrDefault(request.getRole()));
         }
 
         if (request.getPassword() != null) {

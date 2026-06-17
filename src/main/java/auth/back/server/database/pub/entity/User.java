@@ -63,18 +63,18 @@ public class User implements UserDetails {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
-        role = UserRole.normalize(role);
+        role = UserRole.normalizeAccountRoleOrDefault(role);
     }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
-        role = UserRole.normalize(role);
+        role = UserRole.normalizeAccountRoleOrDefault(role);
     }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_" + UserRole.normalize(role)));
+        return List.of(new SimpleGrantedAuthority("ROLE_" + UserRole.normalizeAccountRoleOrDefault(role)));
     }
 
     @Override
