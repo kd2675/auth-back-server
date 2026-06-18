@@ -8,6 +8,7 @@ import auth.back.server.service.AuthAuthorizationService;
 import auth.back.server.service.AuthRegisteredClientService;
 import auth.back.server.service.JwtTokenProvider;
 import auth.back.server.service.RefreshTokenService;
+import auth.back.server.service.oauth2.OAuth2ClientAuthorizationService;
 import auth.back.server.service.oauth2.OAuth2AuthorizationRevocationService;
 import auth.common.core.dto.LoginRequest;
 import auth.common.core.dto.LoginResponse;
@@ -56,6 +57,7 @@ public class AuthController {
     private final AuthRegisteredClientService authRegisteredClientService;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
+    private final OAuth2ClientAuthorizationService oAuth2ClientAuthorizationService;
     private final OAuth2AuthorizationRevocationService oAuth2AuthorizationRevocationService;
 
     @Value("${app.jwt.access-token-expiration-ms:3600000}")
@@ -136,6 +138,7 @@ public class AuthController {
      */
     @PostMapping("/refresh")
     public ResponseEntity<ResponseDataDTO<LoginResponse>> refreshToken(
+            @RequestHeader(value = "X-Client-Id", required = false) String clientIdHeader,
             @CookieValue(name = "refreshToken", required = false) String refreshTokenFromCookie) {
 
         log.info("Token refresh request");
@@ -144,13 +147,13 @@ public class AuthController {
             String refreshTokenValue = requireRefreshToken(refreshTokenFromCookie);
 
             Optional<ResponseEntity<ResponseDataDTO<LoginResponse>>> localRefreshResult =
-                    tryRefreshLocalToken(refreshTokenValue);
+                    tryRefreshLocalToken(refreshTokenValue, clientIdHeader);
 
             if (localRefreshResult.isPresent()) {
                 return localRefreshResult.get();
             }
 
-            return refreshOAuth2Token(refreshTokenValue);
+            return refreshOAuth2Token(refreshTokenValue, clientIdHeader);
         } catch (AuthException ex) {
             CookieUtils.deleteCookie("refreshToken");
             return ResponseEntity.noContent().build();
@@ -164,20 +167,25 @@ public class AuthController {
         return refreshTokenFromCookie;
     }
 
-    private Optional<ResponseEntity<ResponseDataDTO<LoginResponse>>> tryRefreshLocalToken(String refreshTokenValue) {
+    private Optional<ResponseEntity<ResponseDataDTO<LoginResponse>>> tryRefreshLocalToken(
+            String refreshTokenValue,
+            String clientIdHeader
+    ) {
         return authAuthorizationService.findByRefreshToken(refreshTokenValue)
-                .map(localAuthorization -> refreshLocalToken(refreshTokenValue, localAuthorization));
+                .map(localAuthorization -> refreshLocalToken(refreshTokenValue, localAuthorization, clientIdHeader));
     }
 
     private ResponseEntity<ResponseDataDTO<LoginResponse>> refreshLocalToken(
             String refreshTokenValue,
-            AuthAuthorization localAuthorization
+            AuthAuthorization localAuthorization,
+            String clientIdHeader
     ) {
         validateLocalAuthorization(localAuthorization);
 
         RefreshToken refreshToken = loadVerifiedRefreshToken(refreshTokenValue);
         User user = refreshToken.getUser();
         String clientId = authAuthorizationService.resolveClientId(localAuthorization);
+        validateRefreshClient(clientIdHeader, clientId);
         String newAccessToken = jwtTokenProvider.generateAccessToken(
                 user.getUsername(),
                 user.getUserKey(),
@@ -199,6 +207,16 @@ public class AuthController {
         return buildRefreshSuccessResponse(newAccessToken);
     }
 
+    private void validateRefreshClient(String clientIdHeader, String tokenClientId) {
+        if (!StringUtils.hasText(clientIdHeader)) {
+            return;
+        }
+        AuthRegisteredClient requestedClient = authRegisteredClientService.validateActiveClient(clientIdHeader);
+        if (!requestedClient.getClientId().equals(tokenClientId)) {
+            throw new AuthException("Refresh token client mismatch");
+        }
+    }
+
     private void validateLocalAuthorization(AuthAuthorization localAuthorization) {
         if (Boolean.TRUE.equals(localAuthorization.getInvalidated())) {
             throw new AuthException("Refresh token has been revoked");
@@ -208,21 +226,36 @@ public class AuthController {
         }
     }
 
-    private ResponseEntity<ResponseDataDTO<LoginResponse>> refreshOAuth2Token(String refreshTokenValue) {
+    private ResponseEntity<ResponseDataDTO<LoginResponse>> refreshOAuth2Token(
+            String refreshTokenValue,
+            String clientIdHeader
+    ) {
         validateOAuth2RefreshToken(refreshTokenValue);
+        validateOAuth2RefreshClient(refreshTokenValue, clientIdHeader);
 
         RefreshToken refreshToken = loadVerifiedRefreshToken(refreshTokenValue);
         User user = refreshToken.getUser();
+        String tokenClientId = oAuth2AuthorizationRevocationService.findRefreshTokenClientId(refreshTokenValue)
+                .orElse(null);
         String newAccessToken = jwtTokenProvider.generateAccessToken(
                 user.getUsername(),
                 user.getUserKey(),
                 user.getRole(),
                 "oauth2",
-                null
+                tokenClientId
         );
 
         log.info("Token refreshed for user: {}", user.getUsername());
         return buildRefreshSuccessResponse(newAccessToken);
+    }
+
+    private void validateOAuth2RefreshClient(String refreshTokenValue, String clientIdHeader) {
+        if (!StringUtils.hasText(clientIdHeader)) {
+            return;
+        }
+        String registeredClientId = oAuth2AuthorizationRevocationService.findRefreshTokenRegisteredClientId(refreshTokenValue)
+                .orElseThrow(() -> new AuthException("Refresh token client not found"));
+        oAuth2ClientAuthorizationService.validateRefreshClient(clientIdHeader, registeredClientId);
     }
 
     private void validateOAuth2RefreshToken(String refreshTokenValue) {

@@ -77,6 +77,15 @@ public class AuthorizationServerConfig {
     @Value("${app.oauth2.front-clients.semo.post-logout-redirect-uri}")
     private String semoPostLogoutRedirectUri;
 
+    @Value("${app.oauth2.front-clients.stock.client-id}")
+    private String stockClientId;
+
+    @Value("${app.oauth2.front-clients.stock.redirect-uri}")
+    private String stockRedirectUri;
+
+    @Value("${app.oauth2.front-clients.stock.post-logout-redirect-uri}")
+    private String stockPostLogoutRedirectUri;
+
     @Value("${app.jwt.access-token-expiration-ms:3600000}")
     private long accessTokenExpirationMs;
 
@@ -200,7 +209,8 @@ public class AuthorizationServerConfig {
                 new FrontClientSpec(museClientId, museRedirectUri, musePostLogoutRedirectUri),
                 new FrontClientSpec(zeroqServiceClientId, zeroqServiceRedirectUri, zeroqServicePostLogoutRedirectUri),
                 new FrontClientSpec(zeroqAdminClientId, zeroqAdminRedirectUri, zeroqAdminPostLogoutRedirectUri),
-                new FrontClientSpec(semoClientId, semoRedirectUri, semoPostLogoutRedirectUri)
+                new FrontClientSpec(semoClientId, semoRedirectUri, semoPostLogoutRedirectUri),
+                new FrontClientSpec(stockClientId, stockRedirectUri, stockPostLogoutRedirectUri)
         );
     }
 
@@ -231,7 +241,8 @@ public class AuthorizationServerConfig {
                 new LocalClientSpec(museClientId, "Muse Local Login"),
                 new LocalClientSpec(zeroqServiceClientId, "ZeroQ Service Local Login"),
                 new LocalClientSpec(zeroqAdminClientId, "ZeroQ Admin Local Login"),
-                new LocalClientSpec(semoClientId, "Semo Local Login")
+                new LocalClientSpec(semoClientId, "Semo Local Login"),
+                new LocalClientSpec(stockClientId, "Stock Local Login")
         );
     }
 

@@ -32,7 +32,7 @@ public class UserService implements UserDetailsService {
     private final PasswordEncoder passwordEncoder;
     private final UserKeyGenerator userKeyGenerator;
 
-    @Value("${app.signup.manager-secret:1234}")
+    @Value("${app.signup.manager-secret:}")
     private String managerSignupSecret;
 
     /**

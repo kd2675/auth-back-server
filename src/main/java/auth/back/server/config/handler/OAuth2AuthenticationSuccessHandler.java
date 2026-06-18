@@ -44,6 +44,9 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     @Value("${app.oauth2.social.redirect-uris.semo}")
     private String semoRedirectUri;
 
+    @Value("${app.oauth2.social.redirect-uris.stock}")
+    private String stockRedirectUri;
+
     @Value("${app.jwt.refresh-token-expiration-ms:1209600000}")
     private long refreshTokenExpirationMs;
 
@@ -116,6 +119,9 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         }
         if (clientId.endsWith("-semo")) {
             return semoRedirectUri;
+        }
+        if (clientId.endsWith("-stock")) {
+            return stockRedirectUri;
         }
 
         return defaultRedirectUri;

@@ -29,6 +29,9 @@ public class OAuth2AuthenticationFailureHandler extends SimpleUrlAuthenticationF
     @Value("${app.oauth2.social.redirect-uris.semo}")
     private String semoRedirectUri;
 
+    @Value("${app.oauth2.social.redirect-uris.stock}")
+    private String stockRedirectUri;
+
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response, AuthenticationException exception) throws IOException {
         String clientId = resolveClientId(request.getRequestURI());
@@ -87,6 +90,9 @@ public class OAuth2AuthenticationFailureHandler extends SimpleUrlAuthenticationF
         }
         if (clientId.endsWith("-semo")) {
             return semoRedirectUri;
+        }
+        if (clientId.endsWith("-stock")) {
+            return stockRedirectUri;
         }
 
         return defaultRedirectUri;

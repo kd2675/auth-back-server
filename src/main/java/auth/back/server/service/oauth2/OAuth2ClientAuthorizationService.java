@@ -41,6 +41,9 @@ public class OAuth2ClientAuthorizationService {
     @Value("${app.oauth2.front-clients.semo.client-id}")
     private String semoClientId;
 
+    @Value("${app.oauth2.front-clients.stock.client-id}")
+    private String stockClientId;
+
     @Transactional
     public void validateAndSaveAuthorization(
             String clientId,
@@ -87,6 +90,19 @@ public class OAuth2ClientAuthorizationService {
         }
         if (registeredClient.getScopes() == null || registeredClient.getScopes().isEmpty()) {
             throw new AuthException("Client scopes are empty: " + clientId);
+        }
+    }
+
+    public void validateRefreshClient(String clientIdHeader, String registeredClientId) {
+        if (clientIdHeader == null || clientIdHeader.isBlank()) {
+            return;
+        }
+        if (registeredClientId == null || registeredClientId.isBlank()) {
+            throw new AuthException("Refresh token client not found");
+        }
+        RegisteredClient requestedClient = registeredClientRepository.findByClientId(clientIdHeader.trim());
+        if (requestedClient == null || !registeredClientId.equals(requestedClient.getId())) {
+            throw new AuthException("Refresh token client mismatch");
         }
     }
 
@@ -153,6 +169,9 @@ public class OAuth2ClientAuthorizationService {
         }
         if (clientId.endsWith("-semo")) {
             return semoClientId;
+        }
+        if (clientId.endsWith("-stock")) {
+            return stockClientId;
         }
 
         throw new AuthException("Unknown client id: " + clientId);

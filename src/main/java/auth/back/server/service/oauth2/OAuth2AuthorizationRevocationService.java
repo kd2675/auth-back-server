@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.Instant;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -67,6 +68,35 @@ public class OAuth2AuthorizationRevocationService {
 
         Instant expiresAt = authorization.getRefreshToken().getToken().getExpiresAt();
         return expiresAt != null && expiresAt.isBefore(Instant.now());
+    }
+
+    public Optional<String> findRefreshTokenRegisteredClientId(String refreshTokenValue) {
+        if (!StringUtils.hasText(refreshTokenValue)) {
+            return Optional.empty();
+        }
+
+        OAuth2Authorization authorization = findAuthorizationByToken(refreshTokenValue, REFRESH_TOKEN_TYPE);
+        if (authorization == null || authorization.getRefreshToken() == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(authorization.getRegisteredClientId())
+                .filter(StringUtils::hasText);
+    }
+
+    public Optional<String> findRefreshTokenClientId(String refreshTokenValue) {
+        if (!StringUtils.hasText(refreshTokenValue)) {
+            return Optional.empty();
+        }
+
+        OAuth2Authorization authorization = findAuthorizationByToken(refreshTokenValue, REFRESH_TOKEN_TYPE);
+        if (authorization == null || authorization.getRefreshToken() == null) {
+            return Optional.empty();
+        }
+        Object clientId = authorization.getAttribute("client_id");
+        if (clientId instanceof String clientIdValue && StringUtils.hasText(clientIdValue)) {
+            return Optional.of(clientIdValue);
+        }
+        return Optional.empty();
     }
 
     private void invalidateByToken(String tokenValue, OAuth2TokenType tokenType) {

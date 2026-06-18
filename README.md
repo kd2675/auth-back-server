@@ -33,14 +33,14 @@
 
 ## OAuth / Client Notes
 - 소셜 provider: `naver`, `kakao`
-- 프론트 client: `muse-front-service`, `zeroq-front-service`, `zeroq-front-admin`, `semo-front-service`
+- 프론트 client: `muse-front-service`, `zeroq-front-service`, `zeroq-front-admin`, `semo-front-service`, `stock-front-service`
 - redirect URI와 post logout URI는 `application.yml`의 `app.oauth2.front-clients` 기준으로 관리합니다.
 
 ## 구성 포인트
 - DB: profile별 MySQL, 테스트는 H2
 - JWT secret: `AUTH_JWT_SECRET`
 - OAuth client secret: `NAVER_CLIENT_SECRET`, `KAKAO_CLIENT_SECRET`
-- Gateway와 JWT secret 정합성이 맞아야 합니다.
+- Gateway의 `CLOUD_JWT_SECRET`과 `AUTH_JWT_SECRET` 정합성이 맞아야 합니다.
 
 ## 주요 패키지
 - `config`, `config/handler`
