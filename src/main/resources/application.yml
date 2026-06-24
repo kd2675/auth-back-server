@@ -9,9 +9,11 @@ spring:
   application:
     name: auth-back-server
   profiles:
-    active: local
+    active: local-direct
     group:
       local: local
+      local-direct:
+        - local
       test: test
       dev: dev
       prod: prod

@@ -12,6 +12,7 @@
 | Profile | Port |
 |---|---:|
 | `local` | 9000 |
+| `local-direct` | 9000 |
 | `dev` | 20180 |
 | `prod` | 10180 |
 | `test` | 30180 |
@@ -20,6 +21,7 @@
 ```bash
 ./gradlew :auth-back-server:bootRun
 ./gradlew :auth-back-server:bootRun --args='--spring.profiles.active=local'
+./gradlew :auth-back-server:bootRun --args='--spring.profiles.active=local-direct'
 ./gradlew :auth-back-server:bootRun --args='--spring.profiles.active=dev'
 ./gradlew :auth-back-server:bootRun --args='--spring.profiles.active=prod'
 ./gradlew :auth-back-server:bootRun --args='--spring.profiles.active=test'
@@ -42,6 +44,12 @@
 - OAuth client secret: `NAVER_CLIENT_SECRET`, `KAKAO_CLIENT_SECRET`
 - Gateway의 `CLOUD_JWT_SECRET`과 `AUTH_JWT_SECRET` 정합성이 맞아야 합니다.
 
+## Local Direct / Gateway 전환
+
+- `local-direct`는 `local` DB/OAuth 설정을 재사용하면서 Eureka 등록/탐색을 끕니다.
+- Gateway/Eureka 경유로 되돌리려면 기존 `local` profile을 사용합니다.
+- 전환 예시는 `.env.example`에 주석으로 남겨둡니다.
+
 ## 주요 패키지
 - `config`, `config/handler`
 - `controller`
@@ -50,5 +58,5 @@
 - `service`, `service/oauth2`
 
 ## 참고
-- 기본 활성 프로파일은 `local`입니다.
+- 기본 활성 프로파일은 로컬 direct 개발용 `local-direct`입니다.
 - 토큰 만료 시간, OAuth redirect, manager signup secret은 `src/main/resources/application.yml`에서 관리합니다.
