@@ -1,5 +1,22 @@
 package auth.back.server.config.handler;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.stream.Stream;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
 import auth.back.server.database.pub.entity.RefreshToken;
 import auth.back.server.database.pub.entity.User;
 import auth.back.server.service.JwtTokenProvider;
@@ -8,18 +25,6 @@ import auth.back.server.service.RefreshTokenService;
 import auth.back.server.service.oauth2.OAuth2ClientAuthorizationService;
 import auth.back.server.service.oauth2.UserPrincipal;
 import auth.common.core.constant.UserRole;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
-import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
-
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -77,7 +82,7 @@ class OAuth2AuthenticationSuccessHandlerTest {
 
         assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3005/auth/callback");
         assertThat(response.getHeader("Set-Cookie"))
-                .contains("refreshToken=refresh-token")
+                .contains("refreshToken-stock-front-service=refresh-token")
                 .contains("Path=/auth")
                 .contains("HttpOnly")
                 .contains("SameSite=Lax");
@@ -90,6 +95,60 @@ class OAuth2AuthenticationSuccessHandlerTest {
                 eq("refresh-token"),
                 any(Instant.class),
                 any(Instant.class)
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("frontChannelRedirects")
+    void onAuthenticationSuccess_allProviders_redirectWithoutFrontChannelToken(
+            String registrationId,
+            String expectedRedirect,
+            String expectedCookieName
+    ) throws Exception {
+        configureRedirects();
+        User user = User.builder()
+                .userKey("user-key")
+                .username("user")
+                .email("user@example.com")
+                .role(UserRole.USER)
+                .build();
+        when(jwtTokenProvider.generateAccessToken(user, "oauth2", registrationId)).thenReturn("access-token");
+        when(refreshTokenService.createRefreshToken(user, registrationId)).thenReturn(RefreshToken.builder()
+                .user(user)
+                .token("refresh-token")
+                .expiryDate(LocalDateTime.now().plusHours(5))
+                .build());
+        var principal = new UserPrincipal(user, Map.of());
+        var authentication = new OAuth2AuthenticationToken(principal, principal.getAuthorities(), registrationId);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/login/oauth2/code/" + registrationId);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request, response));
+
+        handler.onAuthenticationSuccess(request, response, authentication);
+
+        assertThat(response.getRedirectedUrl()).isEqualTo(expectedRedirect);
+        assertThat(response.getRedirectedUrl()).doesNotContain("token=");
+        assertThat(response.getHeader("Set-Cookie")).contains(expectedCookieName + "=refresh-token");
+    }
+
+    private void configureRedirects() {
+        ReflectionTestUtils.setField(handler, "defaultRedirectUri", "http://localhost:3001/login");
+        ReflectionTestUtils.setField(handler, "museRedirectUri", "http://localhost:3000/auth/callback");
+        ReflectionTestUtils.setField(handler, "zeroqServiceRedirectUri", "http://localhost:3001/auth/callback");
+        ReflectionTestUtils.setField(handler, "zeroqAdminRedirectUri", "http://localhost:3002/auth/callback");
+        ReflectionTestUtils.setField(handler, "semoRedirectUri", "http://localhost:3003/auth/callback");
+        ReflectionTestUtils.setField(handler, "stockRedirectUri", "http://localhost:3005/auth/callback");
+        ReflectionTestUtils.setField(handler, "refreshTokenExpirationMs", 18_000_000L);
+        ReflectionTestUtils.setField(handler, "accessTokenExpirationMs", 600_000L);
+    }
+
+    private static Stream<Arguments> frontChannelRedirects() {
+        return Stream.of(
+                Arguments.of("naver-muse", "http://localhost:3000/auth/callback", "refreshToken-muse-front-service"),
+                Arguments.of("kakao-zeroq-service", "http://localhost:3001/auth/callback", "refreshToken-zeroq-front-service"),
+                Arguments.of("naver-zeroq-admin", "http://localhost:3002/auth/callback", "refreshToken-zeroq-front-admin"),
+                Arguments.of("kakao-semo", "http://localhost:3003/auth/callback", "refreshToken-semo-front-service"),
+                Arguments.of("naver-stock", "http://localhost:3005/auth/callback", "refreshToken-stock-front-service")
         );
     }
 }

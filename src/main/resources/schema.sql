@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS auth_registered_client
     client_name               varchar(200)                            NOT NULL,
     scopes                    varchar(1000)                           NOT NULL,
     access_token_ttl_seconds  int           DEFAULT 600               NOT NULL,
-    refresh_token_ttl_seconds int           DEFAULT 1209600           NOT NULL,
+    refresh_token_ttl_seconds int           DEFAULT 18000             NOT NULL,
     require_consent           tinyint(1)    DEFAULT 0                 NOT NULL,
     enabled                   tinyint(1)    DEFAULT 1                 NOT NULL,
     PRIMARY KEY (id),

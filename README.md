@@ -38,7 +38,7 @@
 - 프론트 client: `muse-front-service`, `zeroq-front-service`, `zeroq-front-admin`, `semo-front-service`, `stock-front-service`
 - redirect URI와 post logout URI는 `application.yml`의 `app.oauth2.front-clients` 기준으로 관리합니다.
 - Spring Authorization Server JDBC 모델은 등록 client와 소셜 세션 저장에만 사용하며, 별도 authorization-server protocol endpoint는 노출하지 않습니다.
-- Stock OAuth 성공은 URL에 access token을 붙이지 않고 `/auth/callback`에서 HttpOnly refresh cookie로 교환합니다.
+- 모든 프론트의 OAuth 성공은 URL에 access token을 붙이지 않고 각 앱의 `/auth/callback`에서 HttpOnly refresh cookie로 교환합니다.
 
 ## 구성 포인트
 - DB: profile별 MySQL, 테스트는 H2
@@ -47,6 +47,7 @@
 - Gateway의 `CLOUD_JWT_SECRET`과 `AUTH_JWT_SECRET` 정합성이 맞아야 합니다.
 - access token은 issuer, 서비스별 audience, `api` scope를 포함합니다.
 - refresh token은 5시간 절대 만료, 요청별 rotation, token-family 재사용 탐지를 적용합니다. 기존 DB에는 서버 기동 전에 `db/ddl/auth_refresh_token_rotation_alter.sql`을 1회 적용합니다.
+- refresh cookie는 프론트 클라이언트별 이름으로 분리해 Muse·Semo·ZeroQ·Stock 동시 로그인 세션이 서로 덮어쓰지 않으며, 기존 단일 `refreshToken` 쿠키는 첫 갱신 시 자동 이전됩니다.
 - 운영 환경은 `AUTH_ISSUER`, `AUTH_CORS_ALLOWED_ORIGINS`, 각 `*_FRONT_BASE_URL`을 HTTPS 공개 주소로 반드시 지정합니다.
 
 ## Local Direct / Gateway 전환

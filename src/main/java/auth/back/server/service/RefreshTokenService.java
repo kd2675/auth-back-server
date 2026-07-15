@@ -1,24 +1,25 @@
 package auth.back.server.service;
 
-import auth.back.server.database.pub.entity.RefreshToken;
-import auth.back.server.database.pub.entity.RefreshTokenStatus;
-import auth.back.server.database.pub.entity.User;
-import auth.back.server.database.pub.repository.RefreshTokenRepository;
-import auth.common.core.exception.AuthException;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.UUID;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.util.Optional;
-import java.util.UUID;
+import auth.back.server.database.pub.entity.RefreshToken;
+import auth.back.server.database.pub.entity.RefreshTokenStatus;
+import auth.back.server.database.pub.entity.User;
+import auth.back.server.database.pub.repository.RefreshTokenRepository;
+import auth.common.core.exception.AuthException;
 
 @Service
 @RequiredArgsConstructor
-@Transactional
+@Transactional(noRollbackFor = AuthException.class)
 @Slf4j
 public class RefreshTokenService {
 

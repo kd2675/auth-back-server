@@ -128,7 +128,7 @@ class AuthControllerRefreshClientTest {
         assertThat(body.getData().getTokenType()).isEqualTo("Bearer");
         assertThat(body.getData().getExpiresIn()).isEqualTo(TimeUnit.MILLISECONDS.toSeconds(3_600_000L));
         assertThat(response.getHeader("Set-Cookie"))
-                .contains("refreshToken=refresh-token")
+                .contains("refreshToken-stock-front-service=refresh-token")
                 .contains("Path=/auth")
                 .contains("HttpOnly")
                 .contains("SameSite=Lax")
@@ -170,7 +170,7 @@ class AuthControllerRefreshClientTest {
         assertThat(responseEntity.getBody()).isNotNull();
         assertThat(responseEntity.getBody().getData().getAccessToken()).isEqualTo("new-access-token");
         assertThat(response.getHeader("Set-Cookie"))
-                .contains("refreshToken=rotated-refresh-token")
+                .contains("refreshToken-stock-front-service=rotated-refresh-token")
                 .contains("Path=/auth")
                 .contains("HttpOnly")
                 .contains("SameSite=Lax");

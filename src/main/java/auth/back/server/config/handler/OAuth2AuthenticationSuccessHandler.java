@@ -1,12 +1,9 @@
 package auth.back.server.config.handler;
 
-import auth.back.server.database.pub.entity.RefreshToken;
-import auth.back.server.database.pub.entity.User;
-import auth.back.server.service.JwtTokenProvider;
-import auth.back.server.service.RefreshTokenCookieService;
-import auth.back.server.service.RefreshTokenService;
-import auth.back.server.service.oauth2.OAuth2ClientAuthorizationService;
-import auth.back.server.service.oauth2.UserPrincipal;
+import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -15,10 +12,14 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
-import org.springframework.web.util.UriComponentsBuilder;
 
-import java.io.IOException;
-import java.time.Instant;
+import auth.back.server.database.pub.entity.RefreshToken;
+import auth.back.server.database.pub.entity.User;
+import auth.back.server.service.JwtTokenProvider;
+import auth.back.server.service.RefreshTokenCookieService;
+import auth.back.server.service.RefreshTokenService;
+import auth.back.server.service.oauth2.OAuth2ClientAuthorizationService;
+import auth.back.server.service.oauth2.UserPrincipal;
 
 @Component
 @RequiredArgsConstructor
@@ -90,18 +91,14 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
 
         refreshTokenCookieService.write(
                 response,
+                clientId,
                 refreshToken.getToken(),
-                java.time.Duration.ofMillis(refreshTokenExpirationMs)
+                Duration.ofMillis(refreshTokenExpirationMs)
         );
 
-        UriComponentsBuilder redirectBuilder = UriComponentsBuilder.fromUriString(resolveFrontRedirectUri(clientId));
-        if (isStockClient(clientId)) {
-            return redirectBuilder.build().toUriString();
-        }
-        return redirectBuilder
-                .queryParam("token", accessToken)
-                .build()
-                .toUriString();
+        // The access token must never travel through the browser URL. Every front client
+        // completes the login by exchanging the HttpOnly refresh cookie on its callback page.
+        return resolveFrontRedirectUri(clientId);
     }
 
     private String resolveClientId(Authentication authentication) {
@@ -133,9 +130,5 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         }
 
         return defaultRedirectUri;
-    }
-
-    private boolean isStockClient(String clientId) {
-        return clientId != null && clientId.endsWith("-stock");
     }
 }

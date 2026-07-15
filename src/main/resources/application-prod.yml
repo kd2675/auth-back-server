@@ -48,10 +48,10 @@ app:
     social:
       default-redirect-uri: ${ZEROQ_FRONT_BASE_URL}/login
       redirect-uris:
-        muse: ${MUSE_FRONT_BASE_URL}/login
-        zeroq-service: ${ZEROQ_FRONT_BASE_URL}/login
-        zeroq-admin: ${ZEROQ_ADMIN_BASE_URL}/login
-        semo: ${SEMO_FRONT_BASE_URL}/login
+        muse: ${MUSE_FRONT_BASE_URL}/auth/callback
+        zeroq-service: ${ZEROQ_FRONT_BASE_URL}/auth/callback
+        zeroq-admin: ${ZEROQ_ADMIN_BASE_URL}/auth/callback
+        semo: ${SEMO_FRONT_BASE_URL}/auth/callback
         stock: ${STOCK_FRONT_BASE_URL}/auth/callback
       failure-redirect-uris:
         stock: ${STOCK_FRONT_BASE_URL}/login

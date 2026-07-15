@@ -18,6 +18,7 @@ class AuthRefreshTokenDdlContractTest {
         assertThat(ddl)
                 .contains("family_id VARCHAR(36) NOT NULL")
                 .contains("status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'")
+                .contains("refresh_token_ttl_seconds INT NOT NULL DEFAULT 18000")
                 .contains("idx_refresh_tokens_family_status")
                 .doesNotContain("uk_refresh_tokens_user_key UNIQUE");
     }

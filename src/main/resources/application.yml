@@ -202,10 +202,10 @@ app:
     social:
       default-redirect-uri: http://localhost:3001/login
       redirect-uris:
-        muse: http://localhost:3000/login
-        zeroq-service: http://localhost:3001/login
-        zeroq-admin: http://localhost:3002/login
-        semo: http://localhost:3003/login
+        muse: http://localhost:3000/auth/callback
+        zeroq-service: http://localhost:3001/auth/callback
+        zeroq-admin: http://localhost:3002/auth/callback
+        semo: http://localhost:3003/auth/callback
         stock: http://localhost:3005/auth/callback
       failure-redirect-uris:
         stock: http://localhost:3005/login

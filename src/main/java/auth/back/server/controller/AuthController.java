@@ -1,5 +1,29 @@
 package auth.back.server.controller;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.StringUtils;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import auth.back.server.database.pub.entity.AuthAuthorization;
 import auth.back.server.database.pub.entity.AuthRegisteredClient;
 import auth.back.server.database.pub.entity.RefreshToken;
@@ -17,25 +41,7 @@ import auth.common.core.dto.LoginResponse;
 import auth.common.core.dto.TokenValidationResponse;
 import auth.common.core.exception.AuthException;
 import auth.common.core.exception.InvalidTokenException;
-import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.http.ResponseEntity;
 import web.common.core.response.base.dto.ResponseDataDTO;
-import org.springframework.util.StringUtils;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Duration;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Auth Controller - 인증/인가 전용 컨트롤러
@@ -125,6 +131,7 @@ public class AuthController {
         // Refresh Token을 HttpOnly 쿠키에 설정
         refreshTokenCookieService.write(
                 response,
+                clientId,
                 refreshToken.getToken(),
                 Duration.ofMillis(refreshTokenExpirationMs)
         );
@@ -147,9 +154,17 @@ public class AuthController {
      */
     @PostMapping("/refresh")
     @Transactional
-    public ResponseEntity<ResponseDataDTO<LoginResponse>> refreshToken(
+    public ResponseEntity<ResponseDataDTO<LoginResponse>> refreshTokenFromRequest(
             @RequestHeader(value = "X-Client-Id", required = false) String clientIdHeader,
-            @CookieValue(name = "${app.auth.refresh-cookie.name:refreshToken}", required = false) String refreshTokenFromCookie,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        String refreshTokenFromCookie = refreshTokenCookieService.read(request, clientIdHeader);
+        return refreshToken(clientIdHeader, refreshTokenFromCookie, response);
+    }
+
+    ResponseEntity<ResponseDataDTO<LoginResponse>> refreshToken(
+            String clientIdHeader,
+            String refreshTokenFromCookie,
             HttpServletResponse response) {
 
         log.info("Token refresh request");
@@ -168,7 +183,7 @@ public class AuthController {
 
             return refreshOAuth2Token(effectiveRefreshTokenValue, refreshTokenUse, clientIdHeader, response);
         } catch (AuthException ex) {
-            refreshTokenCookieService.delete(response);
+            refreshTokenCookieService.delete(response, clientIdHeader);
             return ResponseEntity.noContent().build();
         }
     }
@@ -233,7 +248,7 @@ public class AuthController {
                     responseRefreshToken.getExpiryDate()
             );
         }
-        writeRotatedRefreshCookie(response, responseRefreshToken);
+        writeRotatedRefreshCookie(response, clientIdHeader, responseRefreshToken);
 
         log.info("Token refreshed for local user: {}, clientId: {}", user.getUsername(), clientId);
         return buildRefreshSuccessResponse(newAccessToken);
@@ -305,7 +320,7 @@ public class AuthController {
                     now.plusMillis(refreshRemainingMillis)
             );
         }
-        writeRotatedRefreshCookie(response, responseRefreshToken);
+        writeRotatedRefreshCookie(response, clientIdHeader, responseRefreshToken);
 
         log.info("Token refreshed for user: {}", user.getUsername());
         return buildRefreshSuccessResponse(newAccessToken);
@@ -342,11 +357,24 @@ public class AuthController {
         return ResponseEntity.ok(ResponseDataDTO.of(loginResponse, "Token refreshed"));
     }
 
-    private void writeRotatedRefreshCookie(HttpServletResponse response, RefreshToken refreshToken) {
+    private void writeRotatedRefreshCookie(
+            HttpServletResponse response,
+            String clientId,
+            RefreshToken refreshToken
+    ) {
         long remainingMillis = Math.max(
                 Duration.between(LocalDateTime.now(), refreshToken.getExpiryDate()).toMillis(),
                 0
         );
+        if (StringUtils.hasText(clientId)) {
+            refreshTokenCookieService.write(
+                    response,
+                    clientId,
+                    refreshToken.getToken(),
+                    Duration.ofMillis(remainingMillis)
+            );
+            return;
+        }
         refreshTokenCookieService.write(response, refreshToken.getToken(), Duration.ofMillis(remainingMillis));
     }
 
@@ -358,8 +386,9 @@ public class AuthController {
     @PostMapping("/logout")
     public ResponseDataDTO<Void> logout(
             @RequestHeader(value = "X-User-Key", required = false) String userKeyHeader,
+            @RequestHeader(value = "X-Client-Id", required = false) String clientIdHeader,
             @RequestHeader(value = "Authorization", required = false) String token,
-            @CookieValue(name = "${app.auth.refresh-cookie.name:refreshToken}", required = false) String refreshTokenFromCookie,
+            HttpServletRequest request,
             HttpServletResponse response) {
 
         log.info("Logout request");
@@ -369,6 +398,7 @@ public class AuthController {
             oAuth2AuthorizationRevocationService.invalidateByAccessToken(token.substring(7));
         }
 
+        String refreshTokenFromCookie = refreshTokenCookieService.read(request, clientIdHeader);
         if (StringUtils.hasText(refreshTokenFromCookie)) {
             authAuthorizationService.invalidateByRefreshToken(refreshTokenFromCookie);
             oAuth2AuthorizationRevocationService.invalidateByRefreshToken(refreshTokenFromCookie);
@@ -380,7 +410,7 @@ public class AuthController {
         log.debug("Logout - userKey: {}, token: {}", userKeyHeader, token);
 
         // Refresh Token 쿠키 삭제
-        refreshTokenCookieService.delete(response);
+        refreshTokenCookieService.delete(response, clientIdHeader);
 
         return ResponseDataDTO.of(null, "Logged out successfully");
     }

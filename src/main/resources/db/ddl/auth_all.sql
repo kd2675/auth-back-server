@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS auth_registered_client (
     client_name VARCHAR(200) NOT NULL,
     scopes VARCHAR(1000) NOT NULL,
     access_token_ttl_seconds INT NOT NULL DEFAULT 600,
-    refresh_token_ttl_seconds INT NOT NULL DEFAULT 1209600,
+    refresh_token_ttl_seconds INT NOT NULL DEFAULT 18000,
     require_consent TINYINT(1) NOT NULL DEFAULT 0,
     enabled TINYINT(1) NOT NULL DEFAULT 1,
     CONSTRAINT uk_auth_registered_client_client_id UNIQUE (client_id)

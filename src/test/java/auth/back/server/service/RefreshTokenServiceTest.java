@@ -8,9 +8,11 @@ import auth.common.core.exception.AuthException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -86,6 +88,14 @@ class RefreshTokenServiceTest {
 
         assertThat(use.concurrentRetry()).isTrue();
         assertThat(use.token()).isSameAs(replacement);
+    }
+
+    @Test
+    void transactionPolicy_authFailure_commitsReplayRevocationState() {
+        Transactional transactional = RefreshTokenService.class.getAnnotation(Transactional.class);
+
+        assertThat(transactional).isNotNull();
+        assertThat(Arrays.asList(transactional.noRollbackFor())).contains(AuthException.class);
     }
 
     private RefreshToken activeToken(LocalDateTime expiry) {
