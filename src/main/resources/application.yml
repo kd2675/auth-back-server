@@ -166,7 +166,7 @@ app:
 #    access-token-expiration-ms: 3600000
 #    refresh-token-expiration-ms: 1209600000
     access-token-expiration-ms: 600000 #10분
-    refresh-token-expiration-ms: 3000000 #30분
+    refresh-token-expiration-ms: 18000000 #5시간
   security:
     issuer: http://localhost:9000
   oauth2:
@@ -198,7 +198,7 @@ app:
         zeroq-service: http://localhost:3001/login
         zeroq-admin: http://localhost:3002/login
         semo: http://localhost:3003/login
-        stock: http://localhost:3005/login
+        stock: http://localhost:3005/auth/callback
   signup:
     manager-secret: ${AUTH_MANAGER_SIGNUP_SECRET:}
 

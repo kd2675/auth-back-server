@@ -44,13 +44,13 @@ class OAuth2AuthenticationSuccessHandlerTest {
     }
 
     @Test
-    void onAuthenticationSuccess_stockProvider_redirectsToStockLoginWithTokenAndRefreshCookie() throws Exception {
+    void onAuthenticationSuccess_stockProvider_redirectsToStockCallbackWithFragmentTokenAndRefreshCookie() throws Exception {
         ReflectionTestUtils.setField(handler, "defaultRedirectUri", "http://localhost:3001/login");
         ReflectionTestUtils.setField(handler, "museRedirectUri", "http://localhost:3000/login");
         ReflectionTestUtils.setField(handler, "zeroqServiceRedirectUri", "http://localhost:3001/login");
         ReflectionTestUtils.setField(handler, "zeroqAdminRedirectUri", "http://localhost:3002/login");
         ReflectionTestUtils.setField(handler, "semoRedirectUri", "http://localhost:3003/login");
-        ReflectionTestUtils.setField(handler, "stockRedirectUri", "http://localhost:3005/login");
+        ReflectionTestUtils.setField(handler, "stockRedirectUri", "http://localhost:3005/auth/callback");
         ReflectionTestUtils.setField(handler, "refreshTokenExpirationMs", 1_209_600_000L);
         ReflectionTestUtils.setField(handler, "accessTokenExpirationMs", 3_600_000L);
         User user = User.builder()
@@ -73,7 +73,7 @@ class OAuth2AuthenticationSuccessHandlerTest {
 
         handler.onAuthenticationSuccess(request, response, authentication);
 
-        assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3005/login?token=access-token");
+        assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:3005/auth/callback#token=access-token");
         assertThat(response.getCookie("refreshToken")).isNotNull();
         assertThat(response.getCookie("refreshToken").getValue()).isEqualTo("refresh-token");
         assertThat(response.getCookie("refreshToken").isHttpOnly()).isTrue();

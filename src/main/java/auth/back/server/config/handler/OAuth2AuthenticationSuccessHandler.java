@@ -47,10 +47,10 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     @Value("${app.oauth2.social.redirect-uris.stock}")
     private String stockRedirectUri;
 
-    @Value("${app.jwt.refresh-token-expiration-ms:1209600000}")
+    @Value("${app.jwt.refresh-token-expiration-ms}")
     private long refreshTokenExpirationMs;
 
-    @Value("${app.jwt.access-token-expiration-ms:3600000}")
+    @Value("${app.jwt.access-token-expiration-ms}")
     private long accessTokenExpirationMs;
 
     @Override
@@ -91,9 +91,17 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         int maxAgeSeconds = (int) TimeUnit.MILLISECONDS.toSeconds(refreshTokenExpirationMs);
         CookieUtils.createCookie("refreshToken", refreshToken.getToken(), maxAgeSeconds);
 
-        return UriComponentsBuilder.fromUriString(resolveFrontRedirectUri(clientId))
+        UriComponentsBuilder redirectBuilder = UriComponentsBuilder.fromUriString(resolveFrontRedirectUri(clientId));
+        if (isStockClient(clientId)) {
+            return redirectBuilder
+                    .fragment("token=" + accessToken)
+                    .build()
+                    .toUriString();
+        }
+        return redirectBuilder
                 .queryParam("token", accessToken)
-                .build().toUriString();
+                .build()
+                .toUriString();
     }
 
     private String resolveClientId(Authentication authentication) {
@@ -125,5 +133,9 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         }
 
         return defaultRedirectUri;
+    }
+
+    private boolean isStockClient(String clientId) {
+        return clientId != null && clientId.endsWith("-stock");
     }
 }

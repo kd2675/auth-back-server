@@ -60,10 +60,10 @@ public class AuthController {
     private final OAuth2ClientAuthorizationService oAuth2ClientAuthorizationService;
     private final OAuth2AuthorizationRevocationService oAuth2AuthorizationRevocationService;
 
-    @Value("${app.jwt.access-token-expiration-ms:3600000}")
+    @Value("${app.jwt.access-token-expiration-ms}")
     private long accessTokenExpirationMs;
 
-    @Value("${app.jwt.refresh-token-expiration-ms:1209600000}")
+    @Value("${app.jwt.refresh-token-expiration-ms}")
     private long refreshTokenExpirationMs;
 
     /**
