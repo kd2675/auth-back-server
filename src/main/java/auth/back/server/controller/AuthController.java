@@ -7,7 +7,9 @@ import auth.back.server.database.pub.entity.User;
 import auth.back.server.service.AuthAuthorizationService;
 import auth.back.server.service.AuthRegisteredClientService;
 import auth.back.server.service.JwtTokenProvider;
+import auth.back.server.service.RefreshTokenCookieService;
 import auth.back.server.service.RefreshTokenService;
+import auth.back.server.service.RefreshTokenUse;
 import auth.back.server.service.oauth2.OAuth2ClientAuthorizationService;
 import auth.back.server.service.oauth2.OAuth2AuthorizationRevocationService;
 import auth.common.core.dto.LoginRequest;
@@ -15,6 +17,7 @@ import auth.common.core.dto.LoginResponse;
 import auth.common.core.dto.TokenValidationResponse;
 import auth.common.core.exception.AuthException;
 import auth.common.core.exception.InvalidTokenException;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,10 +28,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
 import web.common.core.response.base.dto.ResponseDataDTO;
-import web.common.core.utils.CookieUtils;
 import org.springframework.util.StringUtils;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -56,6 +60,7 @@ public class AuthController {
     private final AuthAuthorizationService authAuthorizationService;
     private final AuthRegisteredClientService authRegisteredClientService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final RefreshTokenCookieService refreshTokenCookieService;
     private final RefreshTokenService refreshTokenService;
     private final OAuth2ClientAuthorizationService oAuth2ClientAuthorizationService;
     private final OAuth2AuthorizationRevocationService oAuth2AuthorizationRevocationService;
@@ -74,7 +79,8 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseDataDTO<LoginResponse> login(
             @RequestHeader(value = "X-Client-Id", required = false) String clientIdHeader,
-            @RequestBody LoginRequest request) {
+            @RequestBody LoginRequest request,
+            HttpServletResponse response) {
 
         AuthRegisteredClient registeredClient = authRegisteredClientService.validateActiveClient(clientIdHeader);
         String clientId = registeredClient.getClientId();
@@ -100,7 +106,7 @@ public class AuthController {
                 "local",
                 clientId
         );
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user, clientId);
         LocalDateTime accessTokenIssuedAt = LocalDateTime.now();
         LocalDateTime accessTokenExpiresAt = accessTokenIssuedAt.plus(Duration.ofMillis(accessTokenExpirationMs));
         LocalDateTime refreshTokenIssuedAt = LocalDateTime.now();
@@ -117,8 +123,11 @@ public class AuthController {
         );
 
         // Refresh Token을 HttpOnly 쿠키에 설정
-        int maxAgeSeconds = (int) TimeUnit.MILLISECONDS.toSeconds(refreshTokenExpirationMs);
-        CookieUtils.createCookie("refreshToken", refreshToken.getToken(), maxAgeSeconds);
+        refreshTokenCookieService.write(
+                response,
+                refreshToken.getToken(),
+                Duration.ofMillis(refreshTokenExpirationMs)
+        );
 
         log.info("User {} logged in successfully for clientId {}", user.getUsername(), clientId);
 
@@ -137,25 +146,29 @@ public class AuthController {
      * - Refresh Token은 HttpOnly 쿠키에서 읽음
      */
     @PostMapping("/refresh")
+    @Transactional
     public ResponseEntity<ResponseDataDTO<LoginResponse>> refreshToken(
             @RequestHeader(value = "X-Client-Id", required = false) String clientIdHeader,
-            @CookieValue(name = "refreshToken", required = false) String refreshTokenFromCookie) {
+            @CookieValue(name = "${app.auth.refresh-cookie.name:refreshToken}", required = false) String refreshTokenFromCookie,
+            HttpServletResponse response) {
 
         log.info("Token refresh request");
 
         try {
             String refreshTokenValue = requireRefreshToken(refreshTokenFromCookie);
+            RefreshTokenUse refreshTokenUse = refreshTokenService.resolveForUse(refreshTokenValue);
+            String effectiveRefreshTokenValue = refreshTokenUse.token().getToken();
 
             Optional<ResponseEntity<ResponseDataDTO<LoginResponse>>> localRefreshResult =
-                    tryRefreshLocalToken(refreshTokenValue, clientIdHeader);
+                    tryRefreshLocalToken(effectiveRefreshTokenValue, refreshTokenUse, clientIdHeader, response);
 
             if (localRefreshResult.isPresent()) {
                 return localRefreshResult.get();
             }
 
-            return refreshOAuth2Token(refreshTokenValue, clientIdHeader);
+            return refreshOAuth2Token(effectiveRefreshTokenValue, refreshTokenUse, clientIdHeader, response);
         } catch (AuthException ex) {
-            CookieUtils.deleteCookie("refreshToken");
+            refreshTokenCookieService.delete(response);
             return ResponseEntity.noContent().build();
         }
     }
@@ -169,20 +182,23 @@ public class AuthController {
 
     private Optional<ResponseEntity<ResponseDataDTO<LoginResponse>>> tryRefreshLocalToken(
             String refreshTokenValue,
-            String clientIdHeader
+            RefreshTokenUse refreshTokenUse,
+            String clientIdHeader,
+            HttpServletResponse response
     ) {
         return authAuthorizationService.findByRefreshToken(refreshTokenValue)
-                .map(localAuthorization -> refreshLocalToken(refreshTokenValue, localAuthorization, clientIdHeader));
+                .map(localAuthorization -> refreshLocalToken(refreshTokenUse, localAuthorization, clientIdHeader, response));
     }
 
     private ResponseEntity<ResponseDataDTO<LoginResponse>> refreshLocalToken(
-            String refreshTokenValue,
+            RefreshTokenUse refreshTokenUse,
             AuthAuthorization localAuthorization,
-            String clientIdHeader
+            String clientIdHeader,
+            HttpServletResponse response
     ) {
         validateLocalAuthorization(localAuthorization);
 
-        RefreshToken refreshToken = loadVerifiedRefreshToken(refreshTokenValue);
+        RefreshToken refreshToken = refreshTokenUse.token();
         User user = refreshToken.getUser();
         String clientId = authAuthorizationService.resolveClientId(localAuthorization);
         validateRefreshClient(clientIdHeader, clientId);
@@ -196,12 +212,28 @@ public class AuthController {
 
         LocalDateTime accessTokenIssuedAt = LocalDateTime.now();
         LocalDateTime accessTokenExpiresAt = accessTokenIssuedAt.plus(Duration.ofMillis(accessTokenExpirationMs));
-        authAuthorizationService.updateAccessToken(
-                localAuthorization,
-                newAccessToken,
-                accessTokenIssuedAt,
-                accessTokenExpiresAt
-        );
+        RefreshToken responseRefreshToken;
+        if (refreshTokenUse.concurrentRetry()) {
+            authAuthorizationService.updateAccessToken(
+                    localAuthorization,
+                    newAccessToken,
+                    accessTokenIssuedAt,
+                    accessTokenExpiresAt
+            );
+            responseRefreshToken = refreshToken;
+        } else {
+            responseRefreshToken = refreshTokenService.rotate(refreshToken);
+            authAuthorizationService.rotateTokens(
+                    localAuthorization,
+                    newAccessToken,
+                    accessTokenIssuedAt,
+                    accessTokenExpiresAt,
+                    responseRefreshToken.getToken(),
+                    LocalDateTime.now(),
+                    responseRefreshToken.getExpiryDate()
+            );
+        }
+        writeRotatedRefreshCookie(response, responseRefreshToken);
 
         log.info("Token refreshed for local user: {}, clientId: {}", user.getUsername(), clientId);
         return buildRefreshSuccessResponse(newAccessToken);
@@ -228,12 +260,14 @@ public class AuthController {
 
     private ResponseEntity<ResponseDataDTO<LoginResponse>> refreshOAuth2Token(
             String refreshTokenValue,
-            String clientIdHeader
+            RefreshTokenUse refreshTokenUse,
+            String clientIdHeader,
+            HttpServletResponse response
     ) {
         validateOAuth2RefreshToken(refreshTokenValue);
         validateOAuth2RefreshClient(refreshTokenValue, clientIdHeader);
 
-        RefreshToken refreshToken = loadVerifiedRefreshToken(refreshTokenValue);
+        RefreshToken refreshToken = refreshTokenUse.token();
         User user = refreshToken.getUser();
         String tokenClientId = oAuth2AuthorizationRevocationService.findRefreshTokenClientId(refreshTokenValue)
                 .orElse(null);
@@ -244,6 +278,34 @@ public class AuthController {
                 "oauth2",
                 tokenClientId
         );
+
+        Instant now = Instant.now();
+        RefreshToken responseRefreshToken = refreshTokenUse.concurrentRetry()
+                ? refreshToken
+                : refreshTokenService.rotate(refreshToken);
+        long refreshRemainingMillis = Math.max(
+                Duration.between(LocalDateTime.now(), responseRefreshToken.getExpiryDate()).toMillis(),
+                0
+        );
+        if (refreshTokenUse.concurrentRetry()) {
+            oAuth2AuthorizationRevocationService.updateAccessToken(
+                    refreshTokenValue,
+                    newAccessToken,
+                    now,
+                    now.plusMillis(accessTokenExpirationMs)
+            );
+        } else {
+            oAuth2AuthorizationRevocationService.rotateTokens(
+                    refreshTokenValue,
+                    newAccessToken,
+                    now,
+                    now.plusMillis(accessTokenExpirationMs),
+                    responseRefreshToken.getToken(),
+                    now,
+                    now.plusMillis(refreshRemainingMillis)
+            );
+        }
+        writeRotatedRefreshCookie(response, responseRefreshToken);
 
         log.info("Token refreshed for user: {}", user.getUsername());
         return buildRefreshSuccessResponse(newAccessToken);
@@ -270,12 +332,6 @@ public class AuthController {
         }
     }
 
-    private RefreshToken loadVerifiedRefreshToken(String refreshTokenValue) {
-        RefreshToken refreshToken = refreshTokenService.findByToken(refreshTokenValue)
-                .orElseThrow(() -> new AuthException("Refresh token not found"));
-        return refreshTokenService.verifyExpiration(refreshToken);
-    }
-
     private ResponseEntity<ResponseDataDTO<LoginResponse>> buildRefreshSuccessResponse(String accessToken) {
         LoginResponse loginResponse = LoginResponse.builder()
                 .accessToken(accessToken)
@@ -284,6 +340,14 @@ public class AuthController {
                 .build();
 
         return ResponseEntity.ok(ResponseDataDTO.of(loginResponse, "Token refreshed"));
+    }
+
+    private void writeRotatedRefreshCookie(HttpServletResponse response, RefreshToken refreshToken) {
+        long remainingMillis = Math.max(
+                Duration.between(LocalDateTime.now(), refreshToken.getExpiryDate()).toMillis(),
+                0
+        );
+        refreshTokenCookieService.write(response, refreshToken.getToken(), Duration.ofMillis(remainingMillis));
     }
 
     /**
@@ -295,7 +359,8 @@ public class AuthController {
     public ResponseDataDTO<Void> logout(
             @RequestHeader(value = "X-User-Key", required = false) String userKeyHeader,
             @RequestHeader(value = "Authorization", required = false) String token,
-            @CookieValue(name = "refreshToken", required = false) String refreshTokenFromCookie) {
+            @CookieValue(name = "${app.auth.refresh-cookie.name:refreshToken}", required = false) String refreshTokenFromCookie,
+            HttpServletResponse response) {
 
         log.info("Logout request");
 
@@ -307,17 +372,15 @@ public class AuthController {
         if (StringUtils.hasText(refreshTokenFromCookie)) {
             authAuthorizationService.invalidateByRefreshToken(refreshTokenFromCookie);
             oAuth2AuthorizationRevocationService.invalidateByRefreshToken(refreshTokenFromCookie);
+            refreshTokenService.revokeByToken(refreshTokenFromCookie);
         }
 
-        if (userKeyHeader != null && !userKeyHeader.isEmpty()) {
-            refreshTokenService.deleteByUserKey(userKeyHeader);
-            log.info("User {} logged out successfully", userKeyHeader);
-        }
+        log.info("Logout completed for userKey {}", userKeyHeader);
 
         log.debug("Logout - userKey: {}, token: {}", userKeyHeader, token);
 
         // Refresh Token 쿠키 삭제
-        CookieUtils.deleteCookie("refreshToken");
+        refreshTokenCookieService.delete(response);
 
         return ResponseDataDTO.of(null, "Logged out successfully");
     }

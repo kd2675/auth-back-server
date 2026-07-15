@@ -26,9 +26,16 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     user_key VARCHAR(64) NOT NULL,
     token VARCHAR(500) NOT NULL,
     expiry_date DATETIME NOT NULL,
+    client_id VARCHAR(100) NOT NULL,
+    family_id VARCHAR(36) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    replaced_by_token VARCHAR(500) NULL,
+    rotated_at DATETIME NULL,
+    revoked_at DATETIME NULL,
     created_at DATETIME NULL,
-    CONSTRAINT uk_refresh_tokens_user_key UNIQUE (user_key),
     CONSTRAINT uk_refresh_tokens_token UNIQUE (token),
+    INDEX idx_refresh_tokens_family_status (family_id, status),
+    INDEX idx_refresh_tokens_user_client_status (user_key, client_id, status),
     CONSTRAINT fk_refresh_tokens_user_key
         FOREIGN KEY (user_key) REFERENCES user(user_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -3,6 +3,7 @@ package auth.back.server.config.handler;
 import auth.back.server.database.pub.entity.RefreshToken;
 import auth.back.server.database.pub.entity.User;
 import auth.back.server.service.JwtTokenProvider;
+import auth.back.server.service.RefreshTokenCookieService;
 import auth.back.server.service.RefreshTokenService;
 import auth.back.server.service.oauth2.OAuth2ClientAuthorizationService;
 import auth.back.server.service.oauth2.UserPrincipal;
@@ -15,17 +16,16 @@ import org.springframework.security.oauth2.client.authentication.OAuth2Authentic
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
-import web.common.core.utils.CookieUtils;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.concurrent.TimeUnit;
 
 @Component
 @RequiredArgsConstructor
 public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final RefreshTokenCookieService refreshTokenCookieService;
     private final RefreshTokenService refreshTokenService;
     private final OAuth2ClientAuthorizationService oAuth2ClientAuthorizationService;
 
@@ -72,7 +72,7 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
         String clientId = resolveClientId(authentication);
 
         String accessToken = jwtTokenProvider.generateAccessToken(user, "oauth2", clientId);
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user, clientId);
         Instant now = Instant.now();
         Instant accessTokenExpiresAt = now.plusMillis(accessTokenExpirationMs);
         Instant refreshTokenExpiresAt = now.plusMillis(refreshTokenExpirationMs);
@@ -88,15 +88,15 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
                 refreshTokenExpiresAt
         );
 
-        int maxAgeSeconds = (int) TimeUnit.MILLISECONDS.toSeconds(refreshTokenExpirationMs);
-        CookieUtils.createCookie("refreshToken", refreshToken.getToken(), maxAgeSeconds);
+        refreshTokenCookieService.write(
+                response,
+                refreshToken.getToken(),
+                java.time.Duration.ofMillis(refreshTokenExpirationMs)
+        );
 
         UriComponentsBuilder redirectBuilder = UriComponentsBuilder.fromUriString(resolveFrontRedirectUri(clientId));
         if (isStockClient(clientId)) {
-            return redirectBuilder
-                    .fragment("token=" + accessToken)
-                    .build()
-                    .toUriString();
+            return redirectBuilder.build().toUriString();
         }
         return redirectBuilder
                 .queryParam("token", accessToken)

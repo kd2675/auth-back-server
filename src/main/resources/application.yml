@@ -2,6 +2,9 @@ server:
   forward-headers-strategy: framework
 
 spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.security.oauth2.server.authorization.autoconfigure.servlet.OAuth2AuthorizationServerAutoConfiguration
   config:
     import:
       - optional:file:.env[.properties]
@@ -161,10 +164,15 @@ spring:
             user-info-uri: https://kapi.kakao.com/v2/user/me
             user-name-attribute: id
 app:
+  auth:
+    refresh-token-reuse-grace-ms: ${AUTH_REFRESH_TOKEN_REUSE_GRACE_MS:5000}
+    refresh-cookie:
+      name: refreshToken
+      path: /auth
+      same-site: ${AUTH_REFRESH_COOKIE_SAME_SITE:Lax}
+      secure: ${AUTH_REFRESH_COOKIE_SECURE:false}
   jwt:
     secret: ${AUTH_JWT_SECRET}
-#    access-token-expiration-ms: 3600000
-#    refresh-token-expiration-ms: 1209600000
     access-token-expiration-ms: 600000 #10분
     refresh-token-expiration-ms: 18000000 #5시간
   security:
@@ -199,6 +207,8 @@ app:
         zeroq-admin: http://localhost:3002/login
         semo: http://localhost:3003/login
         stock: http://localhost:3005/auth/callback
+      failure-redirect-uris:
+        stock: http://localhost:3005/login
   signup:
     manager-secret: ${AUTH_MANAGER_SIGNUP_SECRET:}
 

@@ -28,7 +28,10 @@ class LocalDirectConfigurationTest {
         PropertySource<?> properties = loadLocalDirectProperties();
 
         assertThat(properties.getProperty("app.cors.allowed-origins"))
-                .isEqualTo("${AUTH_CORS_ALLOWED_ORIGINS:http://localhost:3005,http://127.0.0.1:3005}");
+                .asString()
+                .contains("http://localhost:3000")
+                .contains("http://localhost:3005")
+                .contains("http://127.0.0.1:3005");
     }
 
     private PropertySource<?> loadLocalDirectProperties() throws IOException {

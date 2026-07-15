@@ -44,8 +44,6 @@ public class AuthAuthorizationService {
             LocalDateTime refreshTokenExpiresAt
     ) {
         saveConsent(registeredClient, user.getUserKey());
-        invalidateActiveAuthorizations(user.getUserKey(), "replaced_by_new_login");
-
         List<String> scopes = parseScopes(registeredClient.getScopes());
         AuthAuthorization authorization = AuthAuthorization.builder()
                 .id(UUID.randomUUID().toString())
@@ -121,6 +119,27 @@ public class AuthAuthorizationService {
         authAuthorizationRepository.save(authorization);
     }
 
+    @Transactional
+    public void rotateTokens(
+            AuthAuthorization authorization,
+            String newAccessTokenValue,
+            LocalDateTime accessTokenIssuedAt,
+            LocalDateTime accessTokenExpiresAt,
+            String newRefreshTokenValue,
+            LocalDateTime refreshTokenIssuedAt,
+            LocalDateTime refreshTokenExpiresAt
+    ) {
+        authorization.setAccessTokenHash(hashToken(newAccessTokenValue));
+        authorization.setAccessTokenValue(toBytes(newAccessTokenValue));
+        authorization.setAccessTokenIssuedAt(accessTokenIssuedAt);
+        authorization.setAccessTokenExpiresAt(accessTokenExpiresAt);
+        authorization.setRefreshTokenHash(hashToken(newRefreshTokenValue));
+        authorization.setRefreshTokenValue(toBytes(newRefreshTokenValue));
+        authorization.setRefreshTokenIssuedAt(refreshTokenIssuedAt);
+        authorization.setRefreshTokenExpiresAt(refreshTokenExpiresAt);
+        authAuthorizationRepository.save(authorization);
+    }
+
     public String resolveClientId(AuthAuthorization authorization) {
         return authRegisteredClientRepository.findById(authorization.getRegisteredClientId())
                 .map(AuthRegisteredClient::getClientId)
@@ -143,15 +162,6 @@ public class AuthAuthorizationService {
                 .build();
 
         authAuthorizationConsentRepository.save(consent);
-    }
-
-    private void invalidateActiveAuthorizations(String userKey, String reason) {
-        List<AuthAuthorization> activeAuthorizations =
-                authAuthorizationRepository.findByPrincipalNameAndInvalidatedFalse(userKey);
-
-        for (AuthAuthorization activeAuthorization : activeAuthorizations) {
-            invalidateAuthorization(activeAuthorization, reason);
-        }
     }
 
     private void invalidateAuthorization(AuthAuthorization authorization, String reason) {

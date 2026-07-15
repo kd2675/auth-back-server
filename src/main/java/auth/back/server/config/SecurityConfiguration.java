@@ -20,6 +20,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -46,6 +47,9 @@ public class SecurityConfiguration {
     @Value("${app.cors.allowed-origins:}")
     private String allowedOrigins;
 
+    @Value("${app.security.issuer}")
+    private String issuer;
+
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
@@ -55,7 +59,7 @@ public class SecurityConfiguration {
     @Order(50)
     public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/auth/logout", "/auth/validate", "/api/users/**")
+                .securityMatcher("/auth/validate", "/api/users/**")
                 .cors(withDefaults())
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(authorize -> authorize
@@ -86,19 +90,21 @@ public class SecurityConfiguration {
                 "HmacSHA512"
         );
 
-        return NimbusJwtDecoder.withSecretKey(secretKey)
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(secretKey)
                 .macAlgorithm(MacAlgorithm.HS512)
                 .build();
+        decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(issuer));
+        return decoder;
     }
 
     @Bean
-    @Order(100) // Lower precedence than API chain and auto-configured Authorization Server chain
+    @Order(100) // Lower precedence than the resource-server API chain
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
         http
                 .cors(withDefaults())
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/auth/login", "/auth/refresh", "/login/**").permitAll()
+                        .requestMatchers("/auth/login", "/auth/refresh", "/auth/logout", "/login/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2

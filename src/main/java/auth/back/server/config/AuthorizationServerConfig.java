@@ -1,7 +1,6 @@
 package auth.back.server.config;
 
 import auth.back.server.database.pub.entity.AuthRegisteredClient;
-import auth.back.server.database.pub.entity.User;
 import auth.back.server.database.pub.repository.AuthRegisteredClientRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,15 +11,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
-import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
-import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
-import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.security.oauth2.server.authorization.client.JdbcRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
-import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 
@@ -29,17 +24,15 @@ import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
-import com.nimbusds.jose.jwk.JWKSet;
-import com.nimbusds.jose.jwk.RSAKey;
-import com.nimbusds.jose.jwk.source.JWKSource;
-import com.nimbusds.jose.proc.SecurityContext;
-
+/**
+ * Persists registered front clients and social-login authorizations using the
+ * Spring Authorization Server JDBC model. Protocol endpoint auto-configuration
+ * is disabled because this application is an OAuth2 client of Naver/Kakao, not
+ * a public OAuth2 authorization server.
+ */
 @Configuration
 @RequiredArgsConstructor
 public class AuthorizationServerConfig {
-
-    @Value("${app.security.issuer}")
-    private String issuer;
 
     @Value("${app.oauth2.front-clients.muse.client-id}")
     private String museClientId;
@@ -91,20 +84,6 @@ public class AuthorizationServerConfig {
 
     @Value("${app.jwt.refresh-token-expiration-ms}")
     private long refreshTokenExpirationMs;
-
-    @Bean
-    public AuthorizationServerSettings authorizationServerSettings() {
-        return AuthorizationServerSettings.builder()
-                .issuer(issuer)
-                .build();
-    }
-
-    @Bean
-    public JWKSource<SecurityContext> jwkSource() {
-        RSAKey rsaKey = Jwks.generateRsa();
-        JWKSet jwkSet = new JWKSet(rsaKey);
-        return (selector, context) -> selector.select(jwkSet);
-    }
 
     @Bean
     public RegisteredClientRepository registeredClientRepository(DataSource dataSource) {
@@ -259,16 +238,4 @@ public class AuthorizationServerConfig {
     ) {
     }
 
-    @Bean
-    public OAuth2TokenCustomizer<JwtEncodingContext> tokenCustomizer() {
-        return context -> {
-            if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
-                Object principal = context.getPrincipal().getPrincipal();
-                if (principal instanceof User user) {
-                    context.getClaims().claim("userKey", user.getUserKey());
-                    context.getClaims().claim("role", user.getRole());
-                }
-            }
-        };
-    }
 }

@@ -7,7 +7,9 @@ import auth.back.server.database.pub.entity.User;
 import auth.back.server.service.AuthAuthorizationService;
 import auth.back.server.service.AuthRegisteredClientService;
 import auth.back.server.service.JwtTokenProvider;
+import auth.back.server.service.RefreshTokenCookieService;
 import auth.back.server.service.RefreshTokenService;
+import auth.back.server.service.RefreshTokenUse;
 import auth.back.server.service.oauth2.OAuth2ClientAuthorizationService;
 import auth.back.server.service.oauth2.OAuth2AuthorizationRevocationService;
 import auth.common.core.dto.LoginRequest;
@@ -73,12 +75,13 @@ class AuthControllerRefreshClientTest {
                 authAuthorizationService,
                 authRegisteredClientService,
                 jwtTokenProvider,
+                new RefreshTokenCookieService("refreshToken", "/auth", "Lax", false),
                 refreshTokenService,
                 oAuth2ClientAuthorizationService,
                 oAuth2AuthorizationRevocationService
         );
         ReflectionTestUtils.setField(authController, "accessTokenExpirationMs", 3_600_000L);
-        ReflectionTestUtils.setField(authController, "refreshTokenExpirationMs", 1_209_600_000L);
+        ReflectionTestUtils.setField(authController, "refreshTokenExpirationMs", 18_000_000L);
         response = new MockHttpServletResponse();
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest(), response));
     }
@@ -99,7 +102,7 @@ class AuthControllerRefreshClientTest {
         RefreshToken refreshToken = RefreshToken.builder()
                 .token("refresh-token")
                 .user(user)
-                .expiryDate(LocalDateTime.now().plusDays(14))
+                .expiryDate(LocalDateTime.now().plusHours(5))
                 .build();
         when(authRegisteredClientService.validateActiveClient("stock-front-service"))
                 .thenReturn(client("stock-front-service"));
@@ -113,21 +116,23 @@ class AuthControllerRefreshClientTest {
                 "local",
                 "stock-front-service"
         )).thenReturn("access-token");
-        when(refreshTokenService.createRefreshToken(user)).thenReturn(refreshToken);
+        when(refreshTokenService.createRefreshToken(user, "stock-front-service")).thenReturn(refreshToken);
 
         var body = authController.login(
                 "stock-front-service",
-                new LoginRequest("stock-user", "password")
+                new LoginRequest("stock-user", "password"),
+                response
         );
 
         assertThat(body.getData().getAccessToken()).isEqualTo("access-token");
         assertThat(body.getData().getTokenType()).isEqualTo("Bearer");
         assertThat(body.getData().getExpiresIn()).isEqualTo(TimeUnit.MILLISECONDS.toSeconds(3_600_000L));
-        assertThat(response.getCookie("refreshToken")).isNotNull();
-        assertThat(response.getCookie("refreshToken").getValue()).isEqualTo("refresh-token");
-        assertThat(response.getCookie("refreshToken").isHttpOnly()).isTrue();
-        assertThat(response.getCookie("refreshToken").getMaxAge())
-                .isEqualTo((int) Duration.ofMillis(1_209_600_000L).toSeconds());
+        assertThat(response.getHeader("Set-Cookie"))
+                .contains("refreshToken=refresh-token")
+                .contains("Path=/auth")
+                .contains("HttpOnly")
+                .contains("SameSite=Lax")
+                .contains("Max-Age=" + Duration.ofHours(5).toSeconds());
         verify(authAuthorizationService).saveLoginAuthorization(
                 org.mockito.Mockito.argThat(client -> "stock-front-service".equals(client.getClientId())),
                 org.mockito.Mockito.eq(user),
@@ -145,8 +150,9 @@ class AuthControllerRefreshClientTest {
         AuthAuthorization authorization = authorization();
         RefreshToken refreshToken = refreshToken();
         when(authAuthorizationService.findByRefreshToken("refresh-token")).thenReturn(Optional.of(authorization));
-        when(refreshTokenService.findByToken("refresh-token")).thenReturn(Optional.of(refreshToken));
-        when(refreshTokenService.verifyExpiration(refreshToken)).thenReturn(refreshToken);
+        when(refreshTokenService.resolveForUse("refresh-token"))
+                .thenReturn(new RefreshTokenUse(refreshToken, false));
+        when(refreshTokenService.rotate(refreshToken)).thenReturn(rotatedRefreshToken());
         when(authAuthorizationService.resolveClientId(authorization)).thenReturn("stock-front-service");
         when(authRegisteredClientService.validateActiveClient("stock-front-service"))
                 .thenReturn(client("stock-front-service"));
@@ -158,14 +164,22 @@ class AuthControllerRefreshClientTest {
                 "stock-front-service"
         )).thenReturn("new-access-token");
 
-        var response = authController.refreshToken("stock-front-service", "refresh-token");
+        var responseEntity = authController.refreshToken("stock-front-service", "refresh-token", response);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().getData().getAccessToken()).isEqualTo("new-access-token");
-        verify(authAuthorizationService).updateAccessToken(
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(responseEntity.getBody()).isNotNull();
+        assertThat(responseEntity.getBody().getData().getAccessToken()).isEqualTo("new-access-token");
+        assertThat(response.getHeader("Set-Cookie"))
+                .contains("refreshToken=rotated-refresh-token")
+                .contains("Path=/auth")
+                .contains("HttpOnly")
+                .contains("SameSite=Lax");
+        verify(authAuthorizationService).rotateTokens(
                 org.mockito.Mockito.eq(authorization),
                 org.mockito.Mockito.eq("new-access-token"),
+                org.mockito.Mockito.any(LocalDateTime.class),
+                org.mockito.Mockito.any(LocalDateTime.class),
+                org.mockito.Mockito.eq("rotated-refresh-token"),
                 org.mockito.Mockito.any(LocalDateTime.class),
                 org.mockito.Mockito.any(LocalDateTime.class)
         );
@@ -175,16 +189,15 @@ class AuthControllerRefreshClientTest {
     void refreshToken_mismatchedClientHeader_rejectsAndDoesNotIssueToken() {
         AuthAuthorization authorization = authorization();
         when(authAuthorizationService.findByRefreshToken("refresh-token")).thenReturn(Optional.of(authorization));
-        when(refreshTokenService.findByToken("refresh-token")).thenReturn(Optional.of(refreshToken()));
-        when(refreshTokenService.verifyExpiration(org.mockito.Mockito.any(RefreshToken.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(refreshTokenService.resolveForUse("refresh-token"))
+                .thenReturn(new RefreshTokenUse(refreshToken(), false));
         when(authAuthorizationService.resolveClientId(authorization)).thenReturn("semo-front-service");
         when(authRegisteredClientService.validateActiveClient("stock-front-service"))
                 .thenReturn(client("stock-front-service"));
 
-        var response = authController.refreshToken("stock-front-service", "refresh-token");
+        var responseEntity = authController.refreshToken("stock-front-service", "refresh-token", response);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         verify(jwtTokenProvider, never()).generateAccessToken(
                 org.mockito.Mockito.anyString(),
                 org.mockito.Mockito.anyString(),
@@ -192,8 +205,11 @@ class AuthControllerRefreshClientTest {
                 org.mockito.Mockito.anyString(),
                 org.mockito.Mockito.anyString()
         );
-        verify(authAuthorizationService, never()).updateAccessToken(
+        verify(authAuthorizationService, never()).rotateTokens(
                 org.mockito.Mockito.any(),
+                org.mockito.Mockito.anyString(),
+                org.mockito.Mockito.any(LocalDateTime.class),
+                org.mockito.Mockito.any(LocalDateTime.class),
                 org.mockito.Mockito.anyString(),
                 org.mockito.Mockito.any(LocalDateTime.class),
                 org.mockito.Mockito.any(LocalDateTime.class)
@@ -205,8 +221,9 @@ class AuthControllerRefreshClientTest {
         AuthAuthorization authorization = authorization();
         RefreshToken refreshToken = refreshToken();
         when(authAuthorizationService.findByRefreshToken("refresh-token")).thenReturn(Optional.of(authorization));
-        when(refreshTokenService.findByToken("refresh-token")).thenReturn(Optional.of(refreshToken));
-        when(refreshTokenService.verifyExpiration(refreshToken)).thenReturn(refreshToken);
+        when(refreshTokenService.resolveForUse("refresh-token"))
+                .thenReturn(new RefreshTokenUse(refreshToken, false));
+        when(refreshTokenService.rotate(refreshToken)).thenReturn(rotatedRefreshToken());
         when(authAuthorizationService.resolveClientId(authorization)).thenReturn("stock-front-service");
         when(jwtTokenProvider.generateAccessToken(
                 "stock-user",
@@ -216,17 +233,48 @@ class AuthControllerRefreshClientTest {
                 "stock-front-service"
         )).thenReturn("new-access-token");
 
-        var response = authController.refreshToken(null, "refresh-token");
+        var responseEntity = authController.refreshToken(null, "refresh-token", response);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().getData().getAccessToken()).isEqualTo("new-access-token");
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(responseEntity.getBody()).isNotNull();
+        assertThat(responseEntity.getBody().getData().getAccessToken()).isEqualTo("new-access-token");
         verify(authRegisteredClientService, never()).validateActiveClient(org.mockito.Mockito.anyString());
+    }
+
+    @Test
+    void refreshToken_concurrentTabRetry_reusesReplacementWithoutSecondRotation() {
+        AuthAuthorization authorization = authorization();
+        RefreshToken currentReplacement = refreshToken();
+        when(refreshTokenService.resolveForUse("rotated-refresh-token"))
+                .thenReturn(new RefreshTokenUse(currentReplacement, true));
+        when(authAuthorizationService.findByRefreshToken("refresh-token"))
+                .thenReturn(Optional.of(authorization));
+        when(authAuthorizationService.resolveClientId(authorization)).thenReturn("stock-front-service");
+        when(jwtTokenProvider.generateAccessToken(
+                "stock-user",
+                "stock-user-key",
+                "USER",
+                "local",
+                "stock-front-service"
+        )).thenReturn("concurrent-access-token");
+
+        var responseEntity = authController.refreshToken(null, "rotated-refresh-token", response);
+
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getHeader("Set-Cookie")).contains("refreshToken=refresh-token");
+        verify(refreshTokenService, never()).rotate(org.mockito.Mockito.any());
+        verify(authAuthorizationService).updateAccessToken(
+                org.mockito.Mockito.eq(authorization),
+                org.mockito.Mockito.eq("concurrent-access-token"),
+                org.mockito.Mockito.any(LocalDateTime.class),
+                org.mockito.Mockito.any(LocalDateTime.class)
+        );
     }
 
     @Test
     void refreshToken_oauthMatchingClientHeader_refreshesWithOriginalSocialClientId() {
         RefreshToken refreshToken = refreshToken();
+        refreshToken.setToken("oauth-refresh-token");
         when(authAuthorizationService.findByRefreshToken("oauth-refresh-token")).thenReturn(Optional.empty());
         when(oAuth2AuthorizationRevocationService.hasRefreshToken("oauth-refresh-token")).thenReturn(true);
         when(oAuth2AuthorizationRevocationService.isRefreshTokenInvalidated("oauth-refresh-token")).thenReturn(false);
@@ -235,8 +283,9 @@ class AuthControllerRefreshClientTest {
                 .thenReturn(Optional.of("registered-stock-front-service"));
         when(oAuth2AuthorizationRevocationService.findRefreshTokenClientId("oauth-refresh-token"))
                 .thenReturn(Optional.of("naver-stock"));
-        when(refreshTokenService.findByToken("oauth-refresh-token")).thenReturn(Optional.of(refreshToken));
-        when(refreshTokenService.verifyExpiration(refreshToken)).thenReturn(refreshToken);
+        when(refreshTokenService.resolveForUse("oauth-refresh-token"))
+                .thenReturn(new RefreshTokenUse(refreshToken, false));
+        when(refreshTokenService.rotate(refreshToken)).thenReturn(rotatedRefreshToken());
         when(jwtTokenProvider.generateAccessToken(
                 "stock-user",
                 "stock-user-key",
@@ -245,11 +294,11 @@ class AuthControllerRefreshClientTest {
                 "naver-stock"
         )).thenReturn("oauth-access-token");
 
-        var response = authController.refreshToken("stock-front-service", "oauth-refresh-token");
+        var responseEntity = authController.refreshToken("stock-front-service", "oauth-refresh-token", response);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().getData().getAccessToken()).isEqualTo("oauth-access-token");
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(responseEntity.getBody()).isNotNull();
+        assertThat(responseEntity.getBody().getData().getAccessToken()).isEqualTo("oauth-access-token");
         verify(oAuth2ClientAuthorizationService).validateRefreshClient(
                 "stock-front-service",
                 "registered-stock-front-service"
@@ -258,6 +307,10 @@ class AuthControllerRefreshClientTest {
 
     @Test
     void refreshToken_oauthMismatchedClientHeader_rejectsAndDoesNotIssueToken() {
+        RefreshToken refreshToken = refreshToken();
+        refreshToken.setToken("oauth-refresh-token");
+        when(refreshTokenService.resolveForUse("oauth-refresh-token"))
+                .thenReturn(new RefreshTokenUse(refreshToken, false));
         when(authAuthorizationService.findByRefreshToken("oauth-refresh-token")).thenReturn(Optional.empty());
         when(oAuth2AuthorizationRevocationService.hasRefreshToken("oauth-refresh-token")).thenReturn(true);
         when(oAuth2AuthorizationRevocationService.isRefreshTokenInvalidated("oauth-refresh-token")).thenReturn(false);
@@ -268,10 +321,10 @@ class AuthControllerRefreshClientTest {
                 .when(oAuth2ClientAuthorizationService)
                 .validateRefreshClient("stock-front-service", "registered-semo-front-service");
 
-        var response = authController.refreshToken("stock-front-service", "oauth-refresh-token");
+        var responseEntity = authController.refreshToken("stock-front-service", "oauth-refresh-token", response);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-        verify(refreshTokenService, never()).findByToken("oauth-refresh-token");
+        assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        verify(refreshTokenService).resolveForUse("oauth-refresh-token");
         verify(jwtTokenProvider, never()).generateAccessToken(
                 org.mockito.Mockito.anyString(),
                 org.mockito.Mockito.anyString(),
@@ -295,6 +348,18 @@ class AuthControllerRefreshClientTest {
     private RefreshToken refreshToken() {
         return RefreshToken.builder()
                 .token("refresh-token")
+                .user(User.builder()
+                        .username("stock-user")
+                        .userKey("stock-user-key")
+                        .role("USER")
+                        .build())
+                .expiryDate(LocalDateTime.now().plusHours(1))
+                .build();
+    }
+
+    private RefreshToken rotatedRefreshToken() {
+        return RefreshToken.builder()
+                .token("rotated-refresh-token")
                 .user(User.builder()
                         .username("stock-user")
                         .userKey("stock-user-key")

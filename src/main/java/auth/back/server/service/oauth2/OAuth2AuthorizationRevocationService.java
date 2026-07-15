@@ -3,6 +3,8 @@ package auth.back.server.service.oauth2;
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames;
+import org.springframework.security.oauth2.core.OAuth2AccessToken;
+import org.springframework.security.oauth2.core.OAuth2RefreshToken;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
@@ -12,6 +14,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -97,6 +100,62 @@ public class OAuth2AuthorizationRevocationService {
             return Optional.of(clientIdValue);
         }
         return Optional.empty();
+    }
+
+    @Transactional
+    public void updateAccessToken(
+            String refreshTokenValue,
+            String newAccessTokenValue,
+            Instant accessTokenIssuedAt,
+            Instant accessTokenExpiresAt
+    ) {
+        OAuth2Authorization authorization = findAuthorizationByToken(refreshTokenValue, REFRESH_TOKEN_TYPE);
+        if (authorization == null) {
+            throw new IllegalStateException("OAuth2 authorization not found for access token update");
+        }
+        OAuth2AccessToken newAccessToken = new OAuth2AccessToken(
+                OAuth2AccessToken.TokenType.BEARER,
+                newAccessTokenValue,
+                accessTokenIssuedAt,
+                accessTokenExpiresAt,
+                authorization.getAuthorizedScopes()
+        );
+        authorizationService.save(OAuth2Authorization.from(authorization)
+                .accessToken(newAccessToken)
+                .build());
+    }
+
+    @Transactional
+    public void rotateTokens(
+            String currentRefreshTokenValue,
+            String newAccessTokenValue,
+            Instant accessTokenIssuedAt,
+            Instant accessTokenExpiresAt,
+            String newRefreshTokenValue,
+            Instant refreshTokenIssuedAt,
+            Instant refreshTokenExpiresAt
+    ) {
+        OAuth2Authorization authorization = findAuthorizationByToken(currentRefreshTokenValue, REFRESH_TOKEN_TYPE);
+        if (authorization == null) {
+            throw new IllegalStateException("OAuth2 authorization not found for refresh rotation");
+        }
+        Set<String> scopes = authorization.getAuthorizedScopes();
+        OAuth2AccessToken newAccessToken = new OAuth2AccessToken(
+                OAuth2AccessToken.TokenType.BEARER,
+                newAccessTokenValue,
+                accessTokenIssuedAt,
+                accessTokenExpiresAt,
+                scopes
+        );
+        OAuth2RefreshToken newRefreshToken = new OAuth2RefreshToken(
+                newRefreshTokenValue,
+                refreshTokenIssuedAt,
+                refreshTokenExpiresAt
+        );
+        authorizationService.save(OAuth2Authorization.from(authorization)
+                .accessToken(newAccessToken)
+                .refreshToken(newRefreshToken)
+                .build());
     }
 
     private void invalidateByToken(String tokenValue, OAuth2TokenType tokenType) {

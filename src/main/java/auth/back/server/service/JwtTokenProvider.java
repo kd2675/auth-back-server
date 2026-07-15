@@ -25,6 +25,9 @@ public class JwtTokenProvider {
     @Value("${app.jwt.refresh-token-expiration-ms}")
     private long refreshTokenExpirationMs;
 
+    @Value("${app.security.issuer}")
+    private String issuer;
+
     /**
      * Access Token 생성
      */
@@ -74,10 +77,13 @@ public class JwtTokenProvider {
         SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
 
         JwtBuilder builder = Jwts.builder()
+                .issuer(issuer)
                 .subject(username)
+                .audience().add(resolveAudience(clientId)).and()
                 .issuedAt(now)
                 .expiration(expiryDate)
-                .signWith(key, SignatureAlgorithm.HS512);
+                .claim("scope", "api")
+                .signWith(key, Jwts.SIG.HS512);
 
         if (userKey != null) {
             builder.claim("userKey", userKey);
@@ -90,9 +96,36 @@ public class JwtTokenProvider {
         }
         if (clientId != null) {
             builder.claim("clientId", clientId);
+            builder.claim("client_id", clientId);
         }
 
         return builder.compact();
+    }
+
+    private String resolveAudience(String clientId) {
+        if (clientId == null) {
+            return "auth-api";
+        }
+        if (clientId.contains("stock")) {
+            return "stock-api";
+        }
+        if (clientId.contains("semo")) {
+            return "semo-api";
+        }
+        if (clientId.contains("muse")) {
+            return "muse-api";
+        }
+        if (clientId.contains("zeroq")) {
+            return "zeroq-api";
+        }
+        return "auth-api";
+    }
+
+    private JwtParser jwtParser(SecretKey key) {
+        return Jwts.parser()
+                .verifyWith(key)
+                .requireIssuer(issuer)
+                .build();
     }
 
     /**
@@ -101,9 +134,7 @@ public class JwtTokenProvider {
     public String getUsernameFromToken(String token) {
         try {
             SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
-            return Jwts.parser()
-                    .verifyWith(key)
-                    .build()
+            return jwtParser(key)
                     .parseSignedClaims(token)
                     .getPayload()
                     .getSubject();
@@ -117,9 +148,7 @@ public class JwtTokenProvider {
     public String getUserKeyFromToken(String token) {
         try {
             SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
-            Claims claims = Jwts.parser()
-                    .verifyWith(key)
-                    .build()
+            Claims claims = jwtParser(key)
                     .parseSignedClaims(token)
                     .getPayload();
             Object value = claims.get("userKey");
@@ -137,9 +166,7 @@ public class JwtTokenProvider {
     public String getRoleFromToken(String token) {
         try {
             SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
-            return Jwts.parser()
-                    .verifyWith(key)
-                    .build()
+            return jwtParser(key)
                     .parseSignedClaims(token)
                     .getPayload()
                     .get("role", String.class);
@@ -156,9 +183,7 @@ public class JwtTokenProvider {
     public boolean validateToken(String token) {
         try {
             SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
-            Jwts.parser()
-                    .verifyWith(key)
-                    .build()
+            jwtParser(key)
                     .parseSignedClaims(token);
             return true;
         } catch (ExpiredJwtException e) {

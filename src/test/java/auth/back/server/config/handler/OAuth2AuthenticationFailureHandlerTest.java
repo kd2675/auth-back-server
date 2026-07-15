@@ -19,7 +19,7 @@ class OAuth2AuthenticationFailureHandlerTest {
         ReflectionTestUtils.setField(handler, "zeroqServiceRedirectUri", "http://localhost:3001/login");
         ReflectionTestUtils.setField(handler, "zeroqAdminRedirectUri", "http://localhost:3002/login");
         ReflectionTestUtils.setField(handler, "semoRedirectUri", "http://localhost:3003/login");
-        ReflectionTestUtils.setField(handler, "stockRedirectUri", "http://localhost:3005/login");
+        ReflectionTestUtils.setField(handler, "stockFailureRedirectUri", "http://localhost:3005/login");
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/login/oauth2/code/naver-stock");
         MockHttpServletResponse response = new MockHttpServletResponse();
 

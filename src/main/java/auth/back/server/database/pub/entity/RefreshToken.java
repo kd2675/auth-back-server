@@ -20,7 +20,7 @@ public class RefreshToken {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_key", referencedColumnName = "user_key", nullable = false)
     private User user;
 
@@ -30,11 +30,34 @@ public class RefreshToken {
     @Column(nullable = false)
     private LocalDateTime expiryDate;
 
+    @Column(name = "client_id", nullable = false, length = 100)
+    private String clientId;
+
+    @Column(name = "family_id", nullable = false, length = 36)
+    private String familyId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private RefreshTokenStatus status = RefreshTokenStatus.ACTIVE;
+
+    @Column(name = "replaced_by_token", length = 500)
+    private String replacedByToken;
+
+    @Column(name = "rotated_at")
+    private LocalDateTime rotatedAt;
+
+    @Column(name = "revoked_at")
+    private LocalDateTime revokedAt;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
+        if (status == null) {
+            status = RefreshTokenStatus.ACTIVE;
+        }
     }
 }

@@ -19,6 +19,10 @@ spring:
     activate:
       on-profile: dev
 
+app:
+  cors:
+    allowed-origins: ${AUTH_CORS_ALLOWED_ORIGINS}
+
 database:
   datasource:
     pub:

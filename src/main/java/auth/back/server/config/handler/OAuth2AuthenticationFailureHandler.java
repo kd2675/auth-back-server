@@ -29,8 +29,8 @@ public class OAuth2AuthenticationFailureHandler extends SimpleUrlAuthenticationF
     @Value("${app.oauth2.social.redirect-uris.semo}")
     private String semoRedirectUri;
 
-    @Value("${app.oauth2.social.redirect-uris.stock}")
-    private String stockRedirectUri;
+    @Value("${app.oauth2.social.failure-redirect-uris.stock:http://localhost:3005/login}")
+    private String stockFailureRedirectUri;
 
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response, AuthenticationException exception) throws IOException {
@@ -38,7 +38,7 @@ public class OAuth2AuthenticationFailureHandler extends SimpleUrlAuthenticationF
         OAuth2AuthenticationProcessingException oauth2Error = findOAuth2Error(exception);
 
         UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(resolveFrontRedirectUri(clientId))
-                .queryParam("error", exception.getLocalizedMessage());
+                .queryParam("error", "소셜 로그인에 실패했습니다. 다시 시도해 주세요.");
 
         if (oauth2Error != null && oauth2Error.getErrorCode() != null) {
             builder.queryParam("errorCode", oauth2Error.getErrorCode());
@@ -92,7 +92,7 @@ public class OAuth2AuthenticationFailureHandler extends SimpleUrlAuthenticationF
             return semoRedirectUri;
         }
         if (clientId.endsWith("-stock")) {
-            return stockRedirectUri;
+            return stockFailureRedirectUri;
         }
 
         return defaultRedirectUri;
