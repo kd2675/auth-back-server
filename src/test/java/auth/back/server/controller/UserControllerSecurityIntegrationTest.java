@@ -20,6 +20,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -102,5 +103,42 @@ class UserControllerSecurityIntegrationTest {
                 .andExpect(jsonPath("$.data.userKey").value(user.getUserKey()))
                 .andExpect(jsonPath("$.data.username").value(user.getUsername()))
                 .andExpect(jsonPath("$.data.role").value(UserRole.USER));
+    }
+
+    @Test
+    void existingGetEndpoint_patch_returnsWrappedMethodNotAllowed() throws Exception {
+        User user = saveUser("method-user-key", "method-user");
+        String accessToken = jwtTokenProvider.generateAccessToken(user, "local", "stock-front-service");
+
+        mockMvc.perform(patch("/api/users/me")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(4050000))
+                .andExpect(jsonPath("$.message").value("HTTP method not allowed"));
+    }
+
+    @Test
+    void missingEndpoint_get_returnsWrappedNotFound() throws Exception {
+        User user = saveUser("missing-user-key", "missing-user");
+        String accessToken = jwtTokenProvider.generateAccessToken(user, "local", "stock-front-service");
+
+        mockMvc.perform(get("/api/users/does-not-exist/path")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value(4040000))
+                .andExpect(jsonPath("$.message").value("Endpoint not found"));
+    }
+
+    private User saveUser(String userKey, String username) {
+        return userRepository.save(User.builder()
+                .userKey(userKey)
+                .username(username)
+                .password(passwordEncoder.encode("stock-password"))
+                .email(username + "@example.com")
+                .role(UserRole.USER)
+                .provider(Provider.LOCAL)
+                .build());
     }
 }

@@ -52,7 +52,7 @@
 
 ## Local Direct / Gateway 전환
 
-- `local-direct`는 `local` DB/OAuth 설정을 재사용하면서 Eureka 등록/탐색을 끕니다.
+- `local-direct`는 `local` DB/OAuth 설정을 재사용하면서 Eureka 등록/탐색을 끄고 `127.0.0.1`에만 바인딩합니다.
 - Gateway/Eureka 경유로 되돌리려면 기존 `local` profile을 사용합니다.
 - 전환 예시는 `.env.example`에 주석으로 남겨둡니다.
 

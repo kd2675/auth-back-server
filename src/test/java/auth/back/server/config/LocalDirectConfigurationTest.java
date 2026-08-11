@@ -15,6 +15,7 @@ class LocalDirectConfigurationTest {
     void localDirectProfile_disablesDiscovery() throws IOException {
         PropertySource<?> properties = loadLocalDirectProperties();
 
+        assertThat(properties.getProperty("server.address")).isEqualTo("127.0.0.1");
         assertThat(properties.getProperty("spring.cloud.config.enabled")).isEqualTo(false);
         assertThat(properties.getProperty("spring.cloud.discovery.enabled")).isEqualTo(false);
         assertThat(properties.getProperty("spring.cloud.service-registry.auto-registration.enabled")).isEqualTo(false);

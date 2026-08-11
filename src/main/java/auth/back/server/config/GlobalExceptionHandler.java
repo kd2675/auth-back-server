@@ -8,8 +8,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import web.common.core.response.base.dto.ResponseErrorDTO;
 import web.common.core.response.base.vo.Code;
 
@@ -69,6 +72,20 @@ public class GlobalExceptionHandler {
         log.warn("Auth exception: {}", e.getMessage());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ResponseErrorDTO.of(Code.UNAUTHORIZED, e.getMessage()));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ResponseErrorDTO> handleMethodNotAllowed(HttpRequestMethodNotSupportedException e) {
+        log.warn("Auth endpoint method not allowed: method={}, supported={}", e.getMethod(), e.getSupportedHttpMethods());
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ResponseErrorDTO.of(Code.METHOD_NOT_ALLOWED, "HTTP method not allowed"));
+    }
+
+    @ExceptionHandler({NoHandlerFoundException.class, NoResourceFoundException.class})
+    public ResponseEntity<ResponseErrorDTO> handleEndpointNotFound(Exception e) {
+        log.warn("Auth endpoint not found: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ResponseErrorDTO.of(Code.NOT_FOUND, "Endpoint not found"));
     }
 
 
