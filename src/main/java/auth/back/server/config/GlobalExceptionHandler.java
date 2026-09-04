@@ -1,5 +1,6 @@
 package auth.back.server.config;
 
+import auth.back.server.service.UserAlreadyExistsException;
 import auth.common.core.exception.AuthException;
 import auth.common.core.exception.InvalidTokenException;
 import auth.common.core.exception.TokenExpiredException;
@@ -62,6 +63,16 @@ public class GlobalExceptionHandler {
         log.warn("Invalid token: {}", e.getMessage());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ResponseErrorDTO.of(Code.TOKEN_MALFORMED, e.getMessage()));
+    }
+
+    /**
+     * 회원가입 식별자 중복
+     */
+    @ExceptionHandler(UserAlreadyExistsException.class)
+    public ResponseEntity<ResponseErrorDTO> handleUserAlreadyExists(UserAlreadyExistsException e) {
+        log.warn("User already exists: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ResponseErrorDTO.of(Code.CONFLICT, e.getMessage()));
     }
 
     /**

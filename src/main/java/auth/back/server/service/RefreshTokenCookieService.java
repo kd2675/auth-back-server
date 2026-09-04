@@ -35,6 +35,7 @@ public class RefreshTokenCookieService {
         response.addHeader(HttpHeaders.SET_COOKIE, build(cookieName, value, maxAge).toString());
     }
 
+    /** clientId별 쿠키를 쓰고 이전 단일 이름 쿠키는 제거해 서비스 간 세션 충돌을 막는다. */
     public void write(HttpServletResponse response, String clientId, String value, Duration maxAge) {
         response.addHeader(HttpHeaders.SET_COOKIE, build(resolveCookieName(clientId), value, maxAge).toString());
         deleteLegacyCookie(response);
@@ -44,11 +45,13 @@ public class RefreshTokenCookieService {
         deleteCookie(response, cookieName);
     }
 
+    /** 현재 client 쿠키와 legacy 쿠키를 Max-Age=0으로 만료시킨다. */
     public void delete(HttpServletResponse response, String clientId) {
         deleteCookie(response, resolveCookieName(clientId));
         deleteLegacyCookie(response);
     }
 
+    /** client별 쿠키를 우선 읽고 이전 배포와의 호환을 위해 legacy 이름을 fallback으로 읽는다. */
     public String read(HttpServletRequest request, String clientId) {
         if (request.getCookies() == null) {
             return null;
@@ -65,6 +68,7 @@ public class RefreshTokenCookieService {
                         .orElse(null));
     }
 
+    /** OAuth registration id와 프런트 client id를 동일한 서비스별 쿠키 이름으로 정규화한다. */
     public String resolveCookieName(String clientId) {
         String canonicalClientId = canonicalClientId(clientId);
         if (canonicalClientId.isEmpty()) {

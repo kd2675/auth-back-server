@@ -66,10 +66,10 @@ public class UserService implements UserDetailsService {
      */
     public User registerUser(String username, String password, String email, String role, String signupSecret) {
         if (userRepository.existsByUsername(username)) {
-            throw new AuthException("Username already exists");
+            throw new UserAlreadyExistsException("Username already exists");
         }
         if (userRepository.existsByEmail(email)) {
-            throw new AuthException("Email already exists");
+            throw new UserAlreadyExistsException("Email already exists");
         }
 
         String normalizedRole = normalizeSignupRole(role);

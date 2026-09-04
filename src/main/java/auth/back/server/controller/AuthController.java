@@ -80,7 +80,8 @@ public class AuthController {
     /**
      * 로그인
      * - Access Token은 응답 바디로 반환
-     * - Refresh Token은 HttpOnly 쿠키에 설정
+     * - Refresh Token은 clientId별 HttpOnly 쿠키에 설정
+     * - clientId가 결정한 audience를 Access Token에 기록
      */
     @PostMapping("/login")
     public ResponseDataDTO<LoginResponse> login(
@@ -150,7 +151,9 @@ public class AuthController {
 
     /**
      * 토큰 갱신
-     * - Refresh Token은 HttpOnly 쿠키에서 읽음
+     * - Refresh Token은 X-Client-Id에 대응하는 HttpOnly 쿠키에서 읽음
+     * - 로컬 로그인과 OAuth2 authorization 저장소를 구분해 회전
+     * - 유효하지 않으면 쿠키를 삭제하고 204를 반환
      */
     @PostMapping("/refresh")
     @Transactional
@@ -162,6 +165,9 @@ public class AuthController {
         return refreshToken(clientIdHeader, refreshTokenFromCookie, response);
     }
 
+    /**
+     * refresh token의 원본 로그인 유형을 판별해 로컬 또는 OAuth2 회전 경로로 위임한다.
+     */
     ResponseEntity<ResponseDataDTO<LoginResponse>> refreshToken(
             String clientIdHeader,
             String refreshTokenFromCookie,
@@ -205,6 +211,10 @@ public class AuthController {
                 .map(localAuthorization -> refreshLocalToken(refreshTokenUse, localAuthorization, clientIdHeader, response));
     }
 
+    /**
+     * 로컬 authorization의 client 결속을 확인하고 access token과 refresh token을 함께 회전한다.
+     * 동시 재시도 grace 요청은 같은 교체 refresh token을 재사용한다.
+     */
     private ResponseEntity<ResponseDataDTO<LoginResponse>> refreshLocalToken(
             RefreshTokenUse refreshTokenUse,
             AuthAuthorization localAuthorization,
@@ -273,6 +283,9 @@ public class AuthController {
         }
     }
 
+    /**
+     * Spring Authorization Server 원장의 OAuth2 refresh token 상태와 client 결속을 확인해 회전한다.
+     */
     private ResponseEntity<ResponseDataDTO<LoginResponse>> refreshOAuth2Token(
             String refreshTokenValue,
             RefreshTokenUse refreshTokenUse,
@@ -381,7 +394,7 @@ public class AuthController {
     /**
      * 로그아웃
      * - Gateway가 X-User-Key 헤더를 추가해서 보내줌
-     * - Refresh Token 쿠키 삭제
+     * - access/refresh token 원장을 무효화하고 client별 Refresh Token 쿠키 삭제
      */
     @PostMapping("/logout")
     public ResponseDataDTO<Void> logout(
@@ -416,7 +429,7 @@ public class AuthController {
     }
 
     /**
-     * 토큰 검증 (내부 서비스용)
+     * 토큰 검증 (내부 서비스용). 서명·issuer·만료를 확인하고 사용자 식별 claim을 반환한다.
      */
     @PostMapping("/validate")
     public ResponseDataDTO<TokenValidationResponse> validateToken(

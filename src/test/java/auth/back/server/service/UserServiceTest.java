@@ -51,6 +51,35 @@ class UserServiceTest {
     }
 
     @Test
+    void registerUser_duplicateUsername_throwsUserAlreadyExistsException() {
+        when(userRepository.existsByUsername("user")).thenReturn(true);
+
+        assertThatThrownBy(() -> userService.registerUser(
+                "user",
+                "password",
+                "user@example.com",
+                UserRole.USER,
+                null
+        )).isInstanceOf(UserAlreadyExistsException.class)
+                .hasMessage("Username already exists");
+    }
+
+    @Test
+    void registerUser_duplicateEmail_throwsUserAlreadyExistsException() {
+        when(userRepository.existsByUsername("user")).thenReturn(false);
+        when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
+
+        assertThatThrownBy(() -> userService.registerUser(
+                "user",
+                "password",
+                "user@example.com",
+                UserRole.USER,
+                null
+        )).isInstanceOf(UserAlreadyExistsException.class)
+                .hasMessage("Email already exists");
+    }
+
+    @Test
     void registerUser_gatewayRole_throwsAuthException() {
         when(userRepository.existsByUsername("gateway")).thenReturn(false);
         when(userRepository.existsByEmail("gateway@example.com")).thenReturn(false);

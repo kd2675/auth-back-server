@@ -48,7 +48,8 @@ public class RefreshTokenService {
     }
 
     /**
-     * Refresh Token 유효성 검증
+     * token 행을 잠근 뒤 ACTIVE·만료를 검증한다.
+     * 회전 직후의 제한된 동시 요청만 replacement token으로 수렴시키고 그 밖의 재사용은 family를 폐기한다.
      */
     public RefreshTokenUse resolveForUse(String tokenValue) {
         RefreshToken token = refreshTokenRepository.findByTokenForUpdate(tokenValue)
@@ -78,9 +79,7 @@ public class RefreshTokenService {
         }
     }
 
-    /**
-     * 토큰으로 Refresh Token 조회
-     */
+    /** 회전 시각과 replacement가 모두 있고 설정된 동시 재시도 grace 안인지 확인한다. */
     private boolean isWithinConcurrentRetryGrace(RefreshToken token) {
         if (token.getRotatedAt() == null || token.getReplacedByToken() == null) {
             return false;
@@ -90,6 +89,7 @@ public class RefreshTokenService {
                 .isBefore(LocalDateTime.now());
     }
 
+    /** 만료 시각과 familyId를 유지한 새 토큰을 만들고 기존 토큰을 ROTATED로 연결한다. */
     public RefreshToken rotate(RefreshToken currentToken) {
         verifyActiveAndNotExpired(currentToken);
         LocalDateTime now = LocalDateTime.now();
@@ -110,6 +110,7 @@ public class RefreshTokenService {
         return replacement;
     }
 
+    /** 로그아웃 시 아직 ACTIVE인 refresh token만 명시적으로 폐기한다. */
     public void revokeByToken(String tokenValue) {
         refreshTokenRepository.findByTokenForUpdate(tokenValue).ifPresent(token -> {
             if (token.getStatus() == RefreshTokenStatus.ACTIVE) {

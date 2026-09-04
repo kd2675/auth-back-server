@@ -43,6 +43,9 @@ public class JwtTokenProvider {
         return generateAccessToken(user.getUsername(), user.getUserKey(), user.getRole(), loginType, clientId);
     }
 
+    /**
+     * Gateway가 하위 서비스 권한과 audience를 검증할 수 있도록 userKey, role, loginType, clientId를 claim으로 발급한다.
+     */
     public String generateAccessToken(
             String username,
             String userKey,
@@ -102,6 +105,7 @@ public class JwtTokenProvider {
         return builder.compact();
     }
 
+    /** 프런트 client id를 해당 도메인 API audience로 매핑한다. */
     private String resolveAudience(String clientId) {
         if (clientId == null) {
             return "auth-api";
