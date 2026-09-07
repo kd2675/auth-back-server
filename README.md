@@ -1,5 +1,11 @@
 # auth-back-server
 
+## 로컬 환경 파일
+
+기본 `local-direct`는 인증 API를 `127.0.0.1:9000`에 엽니다. Gateway 연동은 `local`을 명시합니다. `.env.example`은 로컬 URL 양식이며 DB/OAuth/JWT 실제 값은 이 프로젝트의 `.env`에 둡니다.
+
+전체 포트·프로필·설정 검증은 워크스페이스의 [로컬 환경 가이드](../LOCAL_DEVELOPMENT.md)를 따릅니다. 기존 개인 환경 파일은 덮어쓰지 않습니다.
+
 인증 및 사용자 관리 서버입니다. 로컬 로그인, OAuth2 로그인, JWT 발급/갱신/검증, 사용자 CRUD를 담당합니다.
 
 ## 역할
